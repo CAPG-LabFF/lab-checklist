@@ -10,3 +10,20 @@ html {
 body {
   @apply bg-slate-100 text-slate-900 antialiased;
 }
+
+/*
+ * The app shell fills the full width on phones — including phones whose browser
+ * is in "Request Desktop Website" mode, where the viewport is faked wide and a
+ * plain max-width would leave big side margins. We constrain the column only for
+ * fine-pointer (mouse) devices, i.e. real desktops, so touch devices always fill
+ * the screen regardless of their reported viewport width.
+ */
+.app-shell {
+  width: 100%;
+  margin-inline: auto;
+}
+@media (pointer: fine) {
+  .app-shell {
+    max-width: 28rem; /* matches Tailwind max-w-md */
+  }
+}

@@ -20,7 +20,7 @@ export default function App() {
   }, [])
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col">
+    <div className="app-shell flex min-h-screen flex-col">
       <header className="sticky top-0 z-10 flex border-b border-slate-200 bg-white">
         <TabButton label="Home" active={tab === 'home'} href="#/home" />
         <TabButton label="Records" active={tab === 'records'} href="#/records" />
