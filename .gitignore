@@ -1,6 +1,7 @@
 node_modules
 dist
 dist-ssr
+qr
 *.local
 .DS_Store
 .vscode/*

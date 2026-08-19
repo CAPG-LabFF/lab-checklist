@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
-import type { AreaState, Area, ActionType } from '../api/backend'
-import { getState } from '../api/backend'
+import { useState } from 'react'
+import type { Area, ActionType } from '../api/backend'
 import { AREAS, AREA_NAME } from '../config/checklists'
 import { lisbonDay } from '../lib/time'
 import { useInitials } from '../hooks/useInitials'
+import { useAreaStates } from '../hooks/useAreaStates'
 import InitialsBar from './InitialsBar'
 import AreaCard from './AreaCard'
 import ChecklistFlow from './ChecklistFlow'
@@ -13,25 +13,11 @@ type Flow = { area: Area; action: ActionType; extraFlags?: Record<string, unknow
 
 export default function Home() {
   const { initials, setInitials, clear, valid } = useInitials()
+  const { states, refreshing, error, everLoaded, refresh } = useAreaStates()
 
-  const [states, setStates] = useState<AreaState[] | null>(null)
-  const [loadError, setLoadError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Area | null>(null)
   const [flow, setFlow] = useState<Flow | null>(null)
   const [toast, setToast] = useState<string | null>(null)
-
-  const refresh = useCallback(async () => {
-    try {
-      setStates(await getState())
-      setLoadError(null)
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'Could not load state.')
-    }
-  }, [])
-
-  useEffect(() => {
-    refresh()
-  }, [refresh])
 
   function startFlow(area: Area, action: ActionType) {
     const s = states?.find((x) => x.area === area)
@@ -66,18 +52,33 @@ export default function Home() {
     )
   }
 
+  // Stale data (from cache or a failed refresh) is still useful — show it, but
+  // tell the user the last sync didn't go through.
+  const showStaleWarning = !!error && !!states
+
   return (
     <>
       <InitialsBar initials={initials} valid={valid} onChange={setInitials} onClear={clear} />
 
       <div className="space-y-3 p-4">
-        {loadError && (
-          <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-            {loadError} <button onClick={refresh} className="underline">Retry</button>
+        <div className="flex h-5 items-center justify-end text-xs text-slate-400">
+          {refreshing ? 'Refreshing…' : showStaleWarning ? '' : null}
+        </div>
+
+        {showStaleWarning && (
+          <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Showing last known state — couldn't reach the server.{' '}
+            <button onClick={refresh} className="underline">Retry</button>
           </div>
         )}
 
-        {!states && !loadError && (
+        {!states && error && (
+          <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error} <button onClick={refresh} className="underline">Retry</button>
+          </div>
+        )}
+
+        {!states && !error && !everLoaded && (
           <div className="py-16 text-center text-slate-400">Loading…</div>
         )}
 

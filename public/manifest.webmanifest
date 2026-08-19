@@ -1,0 +1,15 @@
+{
+  "name": "Lab Opening & Closing Checklist",
+  "short_name": "Lab Checklist",
+  "description": "Record the opening and closing of lab areas.",
+  "start_url": "/lab-checklist/",
+  "scope": "/lab-checklist/",
+  "display": "standalone",
+  "background_color": "#f1f5f9",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "/lab-checklist/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/lab-checklist/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/lab-checklist/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
