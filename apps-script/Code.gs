@@ -16,14 +16,28 @@
  *     deployment → Version: New version. This keeps the /exec URL stable so the
  *     printed QR codes never change.
  *
- * Phase 2 will add: Subscribers tab, subscribe route, 5-minute MailApp trigger.
+ * PHASE 2 SETUP (email notifications), do these once after pasting this file:
+ *  A. Run setupSubscribers() from the editor to create the "Subscribers" tab.
+ *  B. Run installNotificationTrigger() ONCE to schedule the 5-minute email job.
+ *     (Authorize when prompted. Running it again is safe — it de-dupes.)
+ *  C. Redeploy: Deploy → Manage deployments → edit existing → New version.
  */
 
 var SHEET_NAME = 'Records'
+var SUBSCRIBERS_NAME = 'Subscribers'
 var TIMEZONE = 'Europe/Lisbon'
 var AREAS = ['general', 'big_lab', 'small_lab_gc', 'bromo_lab']
+var AREA_LABELS = {
+  general: 'General',
+  big_lab: 'Big Lab',
+  small_lab_gc: 'Small Lab / GC Room',
+  bromo_lab: 'Bromo Lab',
+}
 var ACTIONS = ['opening', 'closing']
 var RECORDS_PAGE = 30
+
+// Column order in the Subscribers sheet.
+var SUB_COLUMNS = ['id', 'email', 'areas', 'token', 'created_at', 'active']
 
 // Column order in the Records sheet. Do not reorder without updating rowToRecord/appendRow.
 var COLUMNS = [
@@ -49,6 +63,7 @@ function doGet(e) {
     var route = (e && e.parameter && e.parameter.route) || 'state'
     if (route === 'state') return json(getState())
     if (route === 'records') return json(getRecords(e.parameter.area, e.parameter.cursor))
+    if (route === 'unsubscribe') return unsubscribePage(e.parameter.token)
     return json({ error: 'Unknown route: ' + route }, 400)
   } catch (err) {
     return json({ error: String(err && err.message ? err.message : err) }, 500)
@@ -61,7 +76,7 @@ function doPost(e) {
     var body = JSON.parse(e.postData.contents)
     var route = body.route
     if (route === 'submit') return json(submitRecord(body.record))
-    if (route === 'subscribe') return json({ error: 'Subscribe is Phase 2' }, 501)
+    if (route === 'subscribe') return json(subscribeEmail(body.email, body.areas))
     return json({ error: 'Unknown route: ' + route }, 400)
   } catch (err) {
     return json({ error: String(err && err.message ? err.message : err) }, 500)
@@ -249,4 +264,189 @@ function setupSheet() {
     sh.appendRow(COLUMNS)
     sh.setFrozenRows(1)
   }
+}
+
+// ===========================================================================
+// PHASE 2 — Subscribers + email notifications
+// ===========================================================================
+
+/** Run ONCE from the editor to create the Subscribers tab with headers. */
+function setupSubscribers() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+  var sh = ss.getSheetByName(SUBSCRIBERS_NAME) || ss.insertSheet(SUBSCRIBERS_NAME)
+  if (sh.getLastRow() === 0) {
+    sh.appendRow(SUB_COLUMNS)
+    sh.setFrozenRows(1)
+  }
+}
+
+function subscribersSheet() {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SUBSCRIBERS_NAME)
+  if (!sh) throw new Error('Tab "' + SUBSCRIBERS_NAME + '" not found. Run setupSubscribers() once.')
+  return sh
+}
+
+/** Add or update a subscriber. `areas` is 'all' or an array of area keys. */
+function subscribeEmail(email, areas) {
+  email = String(email || '').trim().toLowerCase()
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Please enter a valid email address.')
+
+  var areasStr
+  if (areas === 'all') {
+    areasStr = 'all'
+  } else if (Array.isArray(areas) && areas.length) {
+    for (var i = 0; i < areas.length; i++)
+      if (AREAS.indexOf(areas[i]) === -1) throw new Error('Unknown area: ' + areas[i])
+    areasStr = areas.join(',')
+  } else {
+    throw new Error('Choose at least one area (or all areas).')
+  }
+
+  var lock = LockService.getScriptLock()
+  lock.waitLock(10000)
+  try {
+    var sh = subscribersSheet()
+    var last = sh.getLastRow()
+    var rows = last > 1 ? sh.getRange(2, 1, last - 1, SUB_COLUMNS.length).getValues() : []
+    // Update in place if this email already exists.
+    for (var r = 0; r < rows.length; r++) {
+      if (String(rows[r][1]).trim().toLowerCase() === email) {
+        sh.getRange(r + 2, 3).setValue(areasStr) // areas
+        sh.getRange(r + 2, 6).setValue(true) // reactivate
+        return { ok: true, updated: true }
+      }
+    }
+    sh.appendRow([
+      Utilities.getUuid(),
+      email,
+      areasStr,
+      Utilities.getUuid(), // unsubscribe token
+      Utilities.formatDate(new Date(), TIMEZONE, "yyyy-MM-dd'T'HH:mm:ssXXX"),
+      true,
+    ])
+    return { ok: true, updated: false }
+  } finally {
+    lock.releaseLock()
+  }
+}
+
+/** doGet route=unsubscribe&token=… — flips active to FALSE, returns a friendly page. */
+function unsubscribePage(token) {
+  var msg = 'Link not recognised. You may already be unsubscribed.'
+  if (token) {
+    var sh = subscribersSheet()
+    var last = sh.getLastRow()
+    var rows = last > 1 ? sh.getRange(2, 1, last - 1, SUB_COLUMNS.length).getValues() : []
+    for (var r = 0; r < rows.length; r++) {
+      if (String(rows[r][3]) === String(token)) {
+        sh.getRange(r + 2, 6).setValue(false)
+        msg = 'You have been unsubscribed from lab notifications for ' + rows[r][1] + '.'
+        break
+      }
+    }
+  }
+  return HtmlService.createHtmlOutput(
+    '<div style="font-family:system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem;text-align:center">' +
+      '<h2>Lab Checklist</h2><p>' + msg + '</p></div>',
+  )
+}
+
+/**
+ * TIME-DRIVEN: runs every 5 minutes. Sends one email per unnotified record to
+ * matching active subscribers, then flips notified=TRUE. Decoupled from submit
+ * so email trouble never blocks a submission.
+ */
+function sendPendingNotifications() {
+  var sh = sheet()
+  var last = sh.getLastRow()
+  if (last < 2) return
+  var values = sh.getRange(2, 1, last - 1, COLUMNS.length).getValues()
+  var notifiedCol = COLUMNS.indexOf('notified') + 1
+
+  var subs = readSubscribers()
+  if (!subs.length) {
+    // Still mark as notified so we don't rescan forever once someone subscribes.
+    for (var n = 0; n < values.length; n++)
+      if (values[n][notifiedCol - 1] !== true) sh.getRange(n + 2, notifiedCol).setValue(true)
+    return
+  }
+
+  for (var i = 0; i < values.length; i++) {
+    if (values[i][notifiedCol - 1] === true) continue
+    var rec = rowToRecord(values[i])
+
+    if (MailApp.getRemainingDailyQuota() < 5) {
+      Logger.log('Mail quota nearly exhausted — deferring remaining notifications.')
+      return // leave notified=FALSE; next run retries
+    }
+
+    var recipients = subs.filter(function (s) {
+      return s.active && (s.areas === 'all' || s.areas.split(',').indexOf(rec.area) !== -1)
+    })
+    for (var k = 0; k < recipients.length; k++) {
+      try {
+        MailApp.sendEmail({
+          to: recipients[k].email,
+          subject: emailSubject(rec),
+          htmlBody: emailBody(rec, recipients[k].token),
+        })
+      } catch (e) {
+        Logger.log('Email to ' + recipients[k].email + ' failed: ' + e)
+      }
+    }
+    sh.getRange(i + 2, notifiedCol).setValue(true)
+  }
+}
+
+function readSubscribers() {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SUBSCRIBERS_NAME)
+  if (!sh) return []
+  var last = sh.getLastRow()
+  if (last < 2) return []
+  return sh.getRange(2, 1, last - 1, SUB_COLUMNS.length).getValues().map(function (row) {
+    return {
+      email: String(row[1]).trim(),
+      areas: String(row[2]).trim(),
+      token: String(row[3]),
+      active: row[5] === true || row[5] === 'TRUE',
+    }
+  })
+}
+
+function emailSubject(rec) {
+  var label = AREA_LABELS[rec.area] || rec.area
+  var verb = rec.action === 'closing' ? (rec.partial ? 'partially closed' : 'closed') : 'opened'
+  var time = Utilities.formatDate(new Date(rec.timestamp), TIMEZONE, 'HH:mm')
+  return '[Lab] ' + label + ' ' + verb + ' by ' + rec.initials + ' — ' + time
+}
+
+function emailBody(rec, token) {
+  var label = AREA_LABELS[rec.area] || rec.area
+  var when = Utilities.formatDate(new Date(rec.timestamp), TIMEZONE, 'EEE d MMM yyyy, HH:mm')
+  var flags = []
+  if (rec.action === 'closing' && rec.partial) flags.push('<b style="color:#b45309">PARTIAL CLOSING</b>')
+  if (rec.overnight) flags.push('<b style="color:#6d28d9">OVERNIGHT REACTION RUNNING</b>')
+  var unsub = ScriptApp.getService().getUrl() + '?route=unsubscribe&token=' + encodeURIComponent(token)
+
+  return (
+    '<div style="font-family:system-ui;max-width:36rem">' +
+    '<h2 style="margin:0 0 .5rem">' + label + ' — ' + rec.action + '</h2>' +
+    '<p style="margin:.25rem 0"><b>By:</b> ' + rec.initials + '<br><b>When:</b> ' + when + '</p>' +
+    (flags.length ? '<p style="margin:.5rem 0">' + flags.join('<br>') + '</p>' : '') +
+    (rec.comment
+      ? '<p style="margin:.5rem 0"><b>Comment:</b><br>' +
+        String(rec.comment).replace(/</g, '&lt;').replace(/\n/g, '<br>') + '</p>'
+      : '') +
+    '<hr style="margin:1rem 0;border:none;border-top:1px solid #ddd">' +
+    '<p style="font-size:12px;color:#888"><a href="' + unsub + '">Unsubscribe</a></p></div>'
+  )
+}
+
+/** Run ONCE to schedule sendPendingNotifications every 5 minutes (de-dupes). */
+function installNotificationTrigger() {
+  var triggers = ScriptApp.getProjectTriggers()
+  for (var i = 0; i < triggers.length; i++)
+    if (triggers[i].getHandlerFunction() === 'sendPendingNotifications')
+      ScriptApp.deleteTrigger(triggers[i])
+  ScriptApp.newTrigger('sendPendingNotifications').timeBased().everyMinutes(5).create()
 }
