@@ -10,7 +10,7 @@
 // (Test account and lab account use the SAME repo, so only this line differs
 //  between them.)
 // ---------------------------------------------------------------------------
-export const EXEC_URL = '' // e.g. 'https://script.google.com/macros/s/AKfy.../exec'
+export const EXEC_URL = 'https://script.google.com/macros/s/AKfycbzXeLpwBSGsOWnsGOSGfret1-5yGaOux1_oceb3Mfc-V2Aqy4DVQ7DgM6VGwDVrDJD0bA/exec' // e.g. 'https://script.google.com/macros/s/AKfy.../exec'
 
 // ---- Domain types ---------------------------------------------------------
 
@@ -79,30 +79,39 @@ async function get<T>(params: Record<string, string>): Promise<T> {
   return (await res.json()) as T
 }
 
+// In dev with no EXEC_URL set, fall back to an in-memory mock so the UI is
+// fully clickable before the backend is deployed. Stripped from production.
+const useMock = import.meta.env.DEV && !EXEC_URL
+const mock = () => import('./devMock')
+
 // ---- Public contract ------------------------------------------------------
 
 /** Current derived state for all four areas. */
-export function getState(): Promise<AreaState[]> {
+export async function getState(): Promise<AreaState[]> {
+  if (useMock) return (await mock()).getState()
   return get<AreaState[]>({ route: 'state' })
 }
 
 /** Paged records for one area, newest first. `cursor` is opaque. */
-export function getRecords(
+export async function getRecords(
   area: Area,
   cursor?: string,
 ): Promise<{ records: LabRecord[]; nextCursor: string | null }> {
+  if (useMock) return (await mock()).getRecords(area, cursor)
   return get({ route: 'records', area, ...(cursor ? { cursor } : {}) })
 }
 
 /** Append one record. Server generates id + timestamp and returns the stored row. */
-export function submit(record: SubmitInput): Promise<LabRecord> {
+export async function submit(record: SubmitInput): Promise<LabRecord> {
+  if (useMock) return (await mock()).submit(record)
   return post<LabRecord>({ route: 'submit', record })
 }
 
 /** Subscribe an email to per-submission alerts for the given areas ('all' or keys). */
-export function subscribe(
+export async function subscribe(
   email: string,
   areas: Area[] | 'all',
 ): Promise<{ ok: true }> {
+  if (useMock) return (await mock()).subscribe()
   return post({ route: 'subscribe', email, areas })
 }

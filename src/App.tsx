@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import Home from './components/Home'
 
 // Two-tab app. GitHub Pages has no SPA fallback, so we use the URL hash for
 // routing — no router library needed.
@@ -24,8 +25,8 @@ export default function App() {
         <TabButton label="Records" active={tab === 'records'} href="#/records" />
       </header>
 
-      <main className="flex-1 p-4">
-        {tab === 'home' ? <HomePlaceholder /> : <RecordsPlaceholder />}
+      <main className="flex-1">
+        {tab === 'home' ? <Home /> : <RecordsPlaceholder />}
       </main>
     </div>
   )
@@ -45,20 +46,13 @@ function TabButton({ label, active, href }: { label: string; active: boolean; hr
   )
 }
 
-function HomePlaceholder() {
-  return (
-    <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-slate-500">
-      <p className="font-medium text-slate-700">Scaffold ready.</p>
-      <p className="mt-1 text-sm">Home screen (cards, state machine, checklists) lands in Phase 1.</p>
-    </div>
-  )
-}
-
 function RecordsPlaceholder() {
   return (
-    <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-slate-500">
-      <p className="font-medium text-slate-700">Records</p>
-      <p className="mt-1 text-sm">Built in Phase 2.</p>
+    <div className="p-4">
+      <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-slate-500">
+        <p className="font-medium text-slate-700">Records</p>
+        <p className="mt-1 text-sm">Built in Phase 2.</p>
+      </div>
     </div>
   )
 }
