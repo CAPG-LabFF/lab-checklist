@@ -27,3 +27,14 @@ body {
     max-width: 28rem; /* matches Tailwind max-w-md */
   }
 }
+
+/*
+ * Touch devices: nudge the base font up so every rem-based size (text, padding,
+ * row height, buttons) scales up for easier reading and tapping with gloves on.
+ * Mouse/desktop keeps the browser default (16px).
+ */
+@media (pointer: coarse) {
+  :root {
+    font-size: 18px;
+  }
+}
