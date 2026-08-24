@@ -4,13 +4,20 @@
 // If the Apps Script Web App is ever replaced, only this file changes.
 // The four exported functions are the entire contract the UI depends on.
 //
-// >>> SET THIS after deploying the Apps Script Web App. <<<
-// Deploy → New deployment → Web app → Execute as: Me → Who has access: Anyone,
-// then paste the /exec URL here. It is the single place the URL lives.
-// (Test account and lab account use the SAME repo, so only this line differs
-//  between them.)
+// >>> PRODUCTION /exec URL lives here (the committed default for a `main` build).
+// Deploy → New deployment → Web app → Execute as: Me → Who has access: Anyone.
+// (Test account and lab account use the SAME repo, so only this line differs.)
+//
+// To develop against a STAGING copy without editing this file, put the staging
+// URL in `.env.local` (gitignored) as VITE_EXEC_URL. In a dev run with no
+// VITE_EXEC_URL set, EXEC_URL is empty so the in-memory mock is used — a dev
+// server never silently talks to the live backend.
 // ---------------------------------------------------------------------------
-export const EXEC_URL = 'https://script.google.com/macros/s/AKfycbzXeLpwBSGsOWnsGOSGfret1-5yGaOux1_oceb3Mfc-V2Aqy4DVQ7DgM6VGwDVrDJD0bA/exec' // e.g. 'https://script.google.com/macros/s/AKfy.../exec'
+const PRODUCTION_EXEC_URL =
+  'https://script.google.com/macros/s/AKfycbzXeLpwBSGsOWnsGOSGfret1-5yGaOux1_oceb3Mfc-V2Aqy4DVQ7DgM6VGwDVrDJD0bA/exec'
+
+export const EXEC_URL: string =
+  import.meta.env.VITE_EXEC_URL ?? (import.meta.env.PROD ? PRODUCTION_EXEC_URL : '')
 
 // ---- Domain types ---------------------------------------------------------
 
@@ -114,4 +121,48 @@ export async function subscribe(
 ): Promise<{ ok: true }> {
   if (useMock) return (await mock()).subscribe()
   return post({ route: 'subscribe', email, areas })
+}
+
+// ---- Presence ("In Lab" board) --------------------------------------------
+// Independent of the checklists. The server records times for traceability but
+// never returns them; nothing here ever exposes a clock time.
+
+export type PresenceEntry = { initials: string; sinceYesterday: boolean }
+export type PresenceEvent = { date: string; initials: string; action: 'in' | 'out' }
+
+/** Current board: who is checked in right now (derived server-side, no writes). */
+export async function getPresence(): Promise<{ present: PresenceEntry[] }> {
+  if (useMock) return (await mock()).getPresence()
+  return get({ route: 'presence' })
+}
+
+/**
+ * Check in or out. The server rejects an invalid toggle (already in / not in)
+ * with an {error} body over HTTP 200, so we surface that explicitly here — the
+ * generic post() cannot, since it only inspects the HTTP status.
+ */
+export async function togglePresence(
+  initials: string,
+  direction: 'in' | 'out',
+): Promise<{ ok: true; present: PresenceEntry[] }> {
+  if (useMock) return (await mock()).togglePresence(initials, direction)
+  if (!EXEC_URL) throw new Error('EXEC_URL is not set')
+  const res = await fetch(EXEC_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ route: 'presence_toggle', initials, direction }),
+    redirect: 'follow',
+  })
+  if (!res.ok) throw new Error(`Server error ${res.status}`)
+  const data = await res.json()
+  if (data && data.error) throw new Error(data.error)
+  return data
+}
+
+/** Paged presence history, newest first — date + initials + action, no times. */
+export async function getPresenceHistory(
+  cursor?: string,
+): Promise<{ events: PresenceEvent[]; nextCursor: string | null }> {
+  if (useMock) return (await mock()).getPresenceHistory(cursor)
+  return get({ route: 'presence_history', ...(cursor ? { cursor } : {}) })
 }

@@ -93,6 +93,14 @@ from a branch" — that serves the raw, un-built source and shows a blank page).
 Note: GitHub caches `index.html` for ~10 minutes, so a fresh deploy can look unchanged briefly before
 it points at the new assets. It self-heals.
 
+### Rollback
+
+- **Frontend (the published site):** revert the offending commit and push — Pages rebuilds in ~2 min.
+  For a merged feature, `git revert -m 1 <merge-commit>`.
+- **Backend (Apps Script):** **Deploy → Manage deployments → edit the existing deployment →
+  Version: (previous version number) → Deploy.** One step, and the `/exec` URL is preserved so the
+  QR codes keep working. Never roll back by creating a New deployment.
+
 ## Backend (Apps Script) — first-time setup and redeploys
 
 Full steps are in [docs/phase1-backend-setup.md](docs/phase1-backend-setup.md) (core) and

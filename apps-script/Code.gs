@@ -39,6 +39,18 @@ var RECORDS_PAGE = 30
 // Column order in the Subscribers sheet.
 var SUB_COLUMNS = ['id', 'email', 'areas', 'token', 'created_at', 'active']
 
+// ---- Presence ("In Lab" board) --------------------------------------------
+// Independent of the checklists. Append-only, same discipline as Records.
+var PRESENCE_NAME = 'Presence'
+var PRESENCE_COLUMNS = ['id', 'timestamp', 'date', 'initials', 'action']
+var PRESENCE_PAGE = 30
+// Someone is "in the lab" if their most recent event is `in` and is more recent
+// than the most recent occurrence of this hour (Europe/Lisbon). This only cleans
+// up FORGOTTEN check-outs overnight; an explicit check-out works at any time.
+// 04:00 (not midnight) so late workers are not dropped while still on site.
+// Change this single value to move the reset time.
+var PRESENCE_RESET_HOUR = 4
+
 // Column order in the Records sheet. Do not reorder without updating rowToRecord/appendRow.
 var COLUMNS = [
   'id',
@@ -64,6 +76,8 @@ function doGet(e) {
     if (route === 'state') return json(getState())
     if (route === 'records') return json(getRecords(e.parameter.area, e.parameter.cursor))
     if (route === 'unsubscribe') return unsubscribePage(e.parameter.token)
+    if (route === 'presence') return json(getPresence())
+    if (route === 'presence_history') return json(getPresenceHistory(e.parameter.cursor))
     return json({ error: 'Unknown route: ' + route }, 400)
   } catch (err) {
     return json({ error: String(err && err.message ? err.message : err) }, 500)
@@ -77,6 +91,7 @@ function doPost(e) {
     var route = body.route
     if (route === 'submit') return json(submitRecord(body.record))
     if (route === 'subscribe') return json(subscribeEmail(body.email, body.areas))
+    if (route === 'presence_toggle') return json(togglePresence(body.initials, body.direction))
     return json({ error: 'Unknown route: ' + route }, 400)
   } catch (err) {
     return json({ error: String(err && err.message ? err.message : err) }, 500)
@@ -449,4 +464,135 @@ function installNotificationTrigger() {
     if (triggers[i].getHandlerFunction() === 'sendPendingNotifications')
       ScriptApp.deleteTrigger(triggers[i])
   ScriptApp.newTrigger('sendPendingNotifications').timeBased().everyMinutes(5).create()
+}
+
+// ===========================================================================
+// PRESENCE — "In Lab" board. Fully independent of the checklists.
+// Append-only. Times are stored for traceability but NEVER returned to the UI.
+// ===========================================================================
+
+/** Idempotent: create the Presence tab + header only if absent. Safe to re-run. */
+function setupPresence() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+  var sh = ss.getSheetByName(PRESENCE_NAME) || ss.insertSheet(PRESENCE_NAME)
+  if (sh.getLastRow() === 0) {
+    sh.appendRow(PRESENCE_COLUMNS)
+    sh.setFrozenRows(1)
+    // Keep timestamp + date as literal text so Sheets never re-interprets them.
+    sh.getRange('B:C').setNumberFormat('@')
+  }
+}
+
+function presenceSheet() {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PRESENCE_NAME)
+  if (!sh) throw new Error('Tab "' + PRESENCE_NAME + '" not found. Run setupPresence() once.')
+  return sh
+}
+
+function readPresenceRows() {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PRESENCE_NAME)
+  if (!sh) return []
+  var last = sh.getLastRow()
+  if (last < 2) return []
+  return sh.getRange(2, 1, last - 1, PRESENCE_COLUMNS.length).getValues().map(function (row) {
+    return {
+      id: row[0],
+      timestamp: row[1], // ISO 8601 string with offset
+      date: String(row[2]),
+      initials: String(row[3]).trim().toUpperCase(),
+      action: String(row[4]).trim(),
+    }
+  })
+}
+
+/**
+ * "Session date" of an instant: the Europe/Lisbon calendar day AFTER shifting
+ * back by PRESENCE_RESET_HOUR hours. This maps the daily reset (e.g. 04:00) onto
+ * a midnight boundary, so two instants share a session date iff no reset hour
+ * falls between them. Done in epoch space then formatted in Lisbon, so DST is
+ * handled by the tz database rather than by hand.
+ */
+function presenceSessionDate(instant) {
+  var shifted = new Date(instant.getTime() - PRESENCE_RESET_HOUR * 3600 * 1000)
+  return Utilities.formatDate(shifted, TIMEZONE, 'yyyy-MM-dd')
+}
+
+/**
+ * THE single source of truth for who is present. Used by BOTH the board and the
+ * check-in/out accept-reject, so the button label can never contradict the
+ * server's verdict. Returns [{ initials, sinceYesterday }], sorted by initials.
+ */
+function computePresent(rows, now) {
+  var latest = {} // initials -> most recent row (rows are chronological)
+  for (var i = 0; i < rows.length; i++) latest[rows[i].initials] = rows[i]
+
+  var nowSession = presenceSessionDate(now)
+  var today = Utilities.formatDate(now, TIMEZONE, 'yyyy-MM-dd')
+
+  var out = []
+  for (var ini in latest) {
+    if (!latest.hasOwnProperty(ini)) continue
+    var r = latest[ini]
+    if (r.action !== 'in') continue
+    var ts = new Date(r.timestamp)
+    if (presenceSessionDate(ts) !== nowSession) continue // forgotten check-out, past the reset
+    var day = Utilities.formatDate(ts, TIMEZONE, 'yyyy-MM-dd')
+    out.push({ initials: ini, sinceYesterday: day < today })
+  }
+  out.sort(function (a, b) { return a.initials < b.initials ? -1 : a.initials > b.initials ? 1 : 0 })
+  return out
+}
+
+/** doGet route=presence → current board. Derived at read time; writes nothing. */
+function getPresence() {
+  return { present: computePresent(readPresenceRows(), new Date()) }
+}
+
+/** doPost route=presence_toggle → append one check-in/out. Validated under lock. */
+function togglePresence(initials, direction) {
+  var ini = String(initials || '').trim().toUpperCase()
+  if (!/^[A-Z]{2,4}$/.test(ini)) throw new Error('Initials must be 2–4 letters.')
+  if (direction !== 'in' && direction !== 'out') throw new Error('Invalid direction.')
+
+  var lock = LockService.getScriptLock()
+  try {
+    lock.waitLock(10000)
+  } catch (e) {
+    throw new Error('The system is busy. Please try again.')
+  }
+  try {
+    var now = new Date()
+    var rows = readPresenceRows()
+    var present = computePresent(rows, now)
+    var isIn = false
+    for (var i = 0; i < present.length; i++) if (present[i].initials === ini) isIn = true
+
+    if (direction === 'in' && isIn) throw new Error(ini + ' is already checked in.')
+    if (direction === 'out' && !isIn) throw new Error(ini + ' is not checked in.')
+
+    var iso = Utilities.formatDate(now, TIMEZONE, "yyyy-MM-dd'T'HH:mm:ssXXX")
+    var date = Utilities.formatDate(now, TIMEZONE, 'yyyy-MM-dd')
+    presenceSheet().appendRow([Utilities.getUuid(), iso, date, ini, direction])
+
+    // Recompute including the row we just added, so the client updates at once.
+    rows.push({ timestamp: iso, initials: ini, action: direction })
+    return { ok: true, present: computePresent(rows, now) }
+  } finally {
+    lock.releaseLock()
+  }
+}
+
+/**
+ * doGet route=presence_history → paginated raw events, newest first.
+ * Returns date + initials + action only — NEVER the timestamp — so no clock
+ * time can reach the UI or the app's CSV export.
+ */
+function getPresenceHistory(cursor) {
+  var events = readPresenceRows()
+    .map(function (r) { return { date: r.date, initials: r.initials, action: r.action } })
+    .reverse()
+  var offset = cursor ? parseInt(cursor, 10) : 0
+  var page = events.slice(offset, offset + PRESENCE_PAGE)
+  var next = offset + PRESENCE_PAGE < events.length ? String(offset + PRESENCE_PAGE) : null
+  return { events: page, nextCursor: next }
 }

@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
 import Home from './components/Home'
 import Records from './components/Records'
+import InLab from './components/InLab'
 
-// Two-tab app. GitHub Pages has no SPA fallback, so we use the URL hash for
-// routing — no router library needed.
-type Tab = 'home' | 'records'
+// GitHub Pages has no SPA fallback, so we use the URL hash for routing — no
+// router library needed.
+type Tab = 'home' | 'records' | 'inlab'
 
 function currentTab(): Tab {
-  return window.location.hash === '#/records' ? 'records' : 'home'
+  if (window.location.hash === '#/records') return 'records'
+  if (window.location.hash === '#/inlab') return 'inlab'
+  return 'home'
 }
 
 export default function App() {
@@ -24,10 +27,13 @@ export default function App() {
       <header className="sticky top-0 z-10 flex border-b border-slate-200 bg-white">
         <TabButton label="Home" active={tab === 'home'} href="#/home" />
         <TabButton label="Records" active={tab === 'records'} href="#/records" />
+        <TabButton label="In Lab" active={tab === 'inlab'} href="#/inlab" />
       </header>
 
       <main className="flex-1">
-        {tab === 'home' ? <Home /> : <Records />}
+        {tab === 'home' && <Home />}
+        {tab === 'records' && <Records />}
+        {tab === 'inlab' && <InLab />}
       </main>
     </div>
   )

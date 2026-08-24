@@ -3,7 +3,8 @@
 // Never bundled into production: backend.ts dynamically imports it and only
 // when import.meta.env.DEV is true.
 
-import type { AreaState, LabRecord, SubmitInput, Area } from './backend'
+import type { AreaState, LabRecord, SubmitInput, Area, PresenceEntry } from './backend'
+import { lisbonDay } from '../lib/time'
 
 function iso(offsetMs: number): string {
   return new Date(Date.now() - offsetMs).toISOString()
@@ -82,4 +83,70 @@ export function submit(record: SubmitInput): Promise<LabRecord> {
 
 export function subscribe() {
   return delay({ ok: true as const })
+}
+
+// ---- Presence mock (mirrors Code.gs computePresent, incl. the reset hour) ---
+
+const RESET_HOUR = 4
+type PEvent = { timestamp: string; date: string; initials: string; action: 'in' | 'out' }
+
+function sessionDate(ms: number): string {
+  return lisbonDay(new Date(ms - RESET_HOUR * 3600_000).toISOString())
+}
+
+// Seed: AB is currently in; GH forgot to check out two days ago (must NOT show);
+// CD checked in then out (not present).
+const presence: PEvent[] = [
+  { timestamp: iso(3 * HOUR), date: lisbonDay(iso(3 * HOUR)), initials: 'AB', action: 'in' },
+  { timestamp: iso(48 * HOUR), date: lisbonDay(iso(48 * HOUR)), initials: 'GH', action: 'in' },
+  { timestamp: iso(2 * HOUR), date: lisbonDay(iso(2 * HOUR)), initials: 'CD', action: 'in' },
+  { timestamp: iso(1 * HOUR), date: lisbonDay(iso(1 * HOUR)), initials: 'CD', action: 'out' },
+]
+
+function computePresent(now: number): PresenceEntry[] {
+  const latest: Record<string, PEvent> = {}
+  for (const e of presence) latest[e.initials] = e
+  const nowSession = sessionDate(now)
+  const today = lisbonDay(new Date(now).toISOString())
+  const out: PresenceEntry[] = []
+  for (const ini of Object.keys(latest)) {
+    const r = latest[ini]
+    if (r.action !== 'in') continue
+    const ts = Date.parse(r.timestamp)
+    if (sessionDate(ts) !== nowSession) continue
+    out.push({ initials: ini, sinceYesterday: lisbonDay(new Date(ts).toISOString()) < today })
+  }
+  out.sort((a, b) => (a.initials < b.initials ? -1 : a.initials > b.initials ? 1 : 0))
+  return out
+}
+
+export function getPresence() {
+  return delay({ present: computePresent(Date.now()) })
+}
+
+export function togglePresence(initials: string, direction: 'in' | 'out') {
+  const ini = initials.trim().toUpperCase()
+  if (!/^[A-Z]{2,4}$/.test(ini)) throw new Error('Initials must be 2–4 letters.')
+  const present = computePresent(Date.now())
+  const isIn = present.some((p) => p.initials === ini)
+  if (direction === 'in' && isIn) throw new Error(`${ini} is already checked in.`)
+  if (direction === 'out' && !isIn) throw new Error(`${ini} is not checked in.`)
+  const now = Date.now()
+  presence.push({
+    timestamp: new Date(now).toISOString(),
+    date: lisbonDay(new Date(now).toISOString()),
+    initials: ini,
+    action: direction,
+  })
+  return delay({ ok: true as const, present: computePresent(now) })
+}
+
+export function getPresenceHistory(cursor?: string) {
+  const events = presence
+    .map((e) => ({ date: e.date, initials: e.initials, action: e.action }))
+    .reverse()
+  const offset = cursor ? parseInt(cursor, 10) : 0
+  const page = events.slice(offset, offset + 30)
+  const next = offset + 30 < events.length ? String(offset + 30) : null
+  return delay({ events: page, nextCursor: next })
 }
