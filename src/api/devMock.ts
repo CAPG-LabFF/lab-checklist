@@ -5,7 +5,6 @@
 
 import type { AreaState, LabRecord, SubmitInput, Area, PresenceEntry } from './backend'
 import { lisbonDay } from '../lib/time'
-import { COMMENT_FORCING_ITEM_IDS } from '../config/checklists'
 
 function iso(offsetMs: number): string {
   return new Date(Date.now() - offsetMs).toISOString()
@@ -69,10 +68,8 @@ export function submit(record: SubmitInput): Promise<LabRecord> {
   // Mirror Code.gs: derive partial + the comment rule server-side, never trust
   // the client's flag. Lets the UI dev-run exercise the real acceptance rules.
   const anyUnchecked = record.items.some((it) => it.checked !== true)
-  const hasForcingItem = record.items.some((it) => COMMENT_FORCING_ITEM_IDS.has(it.id))
-  const commentRequired = anyUnchecked || (record.action === 'closing' && hasForcingItem)
-  if (commentRequired && !(record.comment && record.comment.trim())) {
-    return Promise.reject(new Error('A comment is required for this submission.'))
+  if (anyUnchecked && !(record.comment && record.comment.trim())) {
+    return Promise.reject(new Error('A comment is required when any item is left unchecked.'))
   }
   const stored: LabRecord = {
     id: uuid(),

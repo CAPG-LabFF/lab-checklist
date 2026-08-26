@@ -28,15 +28,6 @@ var AREAS = ['general', 'big_lab', 'small_lab_gc', 'bromo_lab']
 var ACTIONS = ['opening', 'closing']
 var RECORDS_PAGE = 30
 
-// Items whose presence in a submission forces a mandatory comment even when
-// everything is checked — the "overnight reactions are registered" items.
-// Mirrors COMMENT_FORCING_ITEM_IDS in src/config/checklists.ts.
-var OVERNIGHT_ITEM_IDS = [
-  'big.close.taps.overnight',
-  'small.close.taps.overnight',
-  'bromo.close.taps.overnight',
-]
-
 // ---- Presence ("In Lab" board) --------------------------------------------
 // Independent of the checklists. Append-only, same discipline as Records.
 var PRESENCE_NAME = 'Presence'
@@ -184,24 +175,17 @@ function validate(record) {
 
   if (!Array.isArray(record.items) || record.items.length === 0) return 'No checklist items submitted.'
   var anyUnchecked = false
-  var hasOvernightItem = false
   for (var i = 0; i < record.items.length; i++) {
     var it = record.items[i]
     // Items may now be checked OR unchecked, but must be well-formed.
     if (!it || typeof it.id !== 'string' || typeof it.checked !== 'boolean')
       return 'Malformed checklist item.'
     if (it.checked !== true) anyUnchecked = true
-    if (OVERNIGHT_ITEM_IDS.indexOf(it.id) !== -1) hasOvernightItem = true
   }
 
-  // A comment is mandatory when anything is left unchecked (any action), and on
-  // closings whose list carries the "overnight reactions are registered" item.
-  var commentRequired = anyUnchecked || (record.action === 'closing' && hasOvernightItem)
-  if (commentRequired && !(record.comment && String(record.comment).trim())) {
-    return anyUnchecked
-      ? 'A comment is required when any item is left unchecked.'
-      : 'A comment is required for this closing (confirm any overnight reactions).'
-  }
+  // A comment is mandatory whenever any item is left unchecked (any action).
+  if (anyUnchecked && !(record.comment && String(record.comment).trim()))
+    return 'A comment is required when any item is left unchecked.'
 
   return null // valid
 }

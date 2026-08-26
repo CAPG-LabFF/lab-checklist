@@ -5,8 +5,8 @@ Two changes ship together:
    all `MailApp` calls). The `Subscribers` tab and the Records `notified` column are **left in place,
    unused** — never deleted.
 2. **"Partially closed" is derived**, not declared. The partial/overnight toggles are gone; a closing
-   with any unchecked item is `partial = true` (amber). Comment is mandatory when anything is
-   unchecked, and on any closing whose list carries "All overnight reactions are registered".
+   with any unchecked item is `partial = true` (amber). A comment is mandatory whenever any item is
+   left unchecked (any area, opening or closing).
 
 ## Order: frontend first, backend second
 
@@ -18,7 +18,7 @@ if we removed endpoints first.
 1. Branch `feature/partial-rework`; develop against the **staging** `/exec` via `.env.local`. Validate:
    - closing with everything checked → red, no comment required
    - closing with one item unchecked → amber, comment required, submission blocked without one
-   - a Big/Small/Bromo closing fully checked still requires a comment (overnight item present)
+   - a fully-checked closing (any area) → red, no comment required
    - the server rejects a partial closing with an empty comment even if the client is bypassed
    - Records shows the unchecked items ("Not done") on an amber record
    - the **In Lab** tab and the **opening** flow are unaffected

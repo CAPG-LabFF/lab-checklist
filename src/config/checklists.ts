@@ -303,21 +303,3 @@ export function allItemIds(): Set<string> {
 export function itemCount(area: Area, action: ActionType): number {
   return CHECKLISTS[area][action].reduce((n, g) => n + g.items.length, 0)
 }
-
-/**
- * Items whose presence in a submission forces a mandatory comment regardless of
- * whether everything is checked — the "overnight reactions are registered" items.
- * Kept mirrored in Code.gs (OVERNIGHT_ITEM_IDS) so the server can enforce it too.
- */
-export const COMMENT_FORCING_ITEM_IDS = new Set<string>([
-  'big.close.taps.overnight',
-  'small.close.taps.overnight',
-  'bromo.close.taps.overnight',
-])
-
-/** True when this area + action list contains a comment-forcing item. */
-export function hasCommentForcingItem(area: Area, action: ActionType): boolean {
-  return CHECKLISTS[area][action].some((g) =>
-    g.items.some((it) => COMMENT_FORCING_ITEM_IDS.has(it.id)),
-  )
-}

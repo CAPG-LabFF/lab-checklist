@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Area, ActionType, LabRecord, SubmittedItem } from '../api/backend'
 import { submit } from '../api/backend'
-import { CHECKLISTS, AREA_NAME, itemCount, hasCommentForcingItem } from '../config/checklists'
+import { CHECKLISTS, AREA_NAME, itemCount } from '../config/checklists'
 import ConfirmModal from './ConfirmModal'
 
 type Props = {
@@ -16,9 +16,6 @@ type Props = {
 export default function ChecklistFlow({ area, action, initials, extraFlags, onDone, onCancel }: Props) {
   const procedure = CHECKLISTS[area][action]
   const total = useMemo(() => itemCount(area, action), [area, action])
-  // Some lists (the closing lists with "overnight reactions are registered")
-  // require a comment even when everything is checked.
-  const forcesComment = useMemo(() => hasCommentForcingItem(area, action), [area, action])
 
   const [checked, setChecked] = useState<Record<string, boolean>>({})
   const [comment, setComment] = useState('')
@@ -32,16 +29,11 @@ export default function ChecklistFlow({ area, action, initials, extraFlags, onDo
   // A closing with anything unchecked is a partial closing (amber). Openings are
   // never "partial" — they stay green — but still need a comment when incomplete.
   const partial = action === 'closing' && anyUnchecked
-  const commentRequired = anyUnchecked || forcesComment
+  const commentRequired = anyUnchecked
   const commentOk = !commentRequired || comment.trim().length > 0
   const canSubmit = commentOk
 
-  const helper = [
-    anyUnchecked ? 'Say exactly what was left undone and why.' : '',
-    forcesComment ? 'Note any overnight reactions left running (or state there are none).' : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
+  const helper = 'Say exactly what was left undone and why.'
 
   function toggle(id: string) {
     setChecked((c) => ({ ...c, [id]: !c[id] }))
