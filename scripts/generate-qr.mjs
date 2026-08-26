@@ -1,18 +1,18 @@
 // Generates a QR code (SVG) for the app URL plus a printable sheet of cards to
 // post in each lab.
 //
-//   npm run qr                       # uses the default URL below
-//   npm run qr -- https://capgff.github.io/lab-checklist/
+//   npm run qr                       # uses the default (live) URL below
+//   npm run qr -- https://capg-labff.github.io/lab-checklist/   # override
 //
-// IMPORTANT: the URL you encode is what gets physically posted. When the site
-// moves to the lab org, regenerate with the lab URL. The repo name never
-// changes, so only the host differs.
+// IMPORTANT: the URL you encode is what gets physically posted. DEFAULT_URL is
+// the live lab URL. If the site ever moves again, keep the repo name identical
+// (only the host changes) and pass the new URL as the argument above.
 import QRCode from 'qrcode'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { mkdirSync, writeFileSync } from 'node:fs'
 
-const DEFAULT_URL = 'https://hugogrilo13.github.io/lab-checklist/'
+const DEFAULT_URL = 'https://capg-labff.github.io/lab-checklist/'
 const url = process.argv[2] || DEFAULT_URL
 
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'qr')

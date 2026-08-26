@@ -112,14 +112,23 @@ Full steps are in [docs/phase1-backend-setup.md](docs/phase1-backend-setup.md) (
 ## Regenerating icons and QR codes
 
 ```bash
-npm run icons                                   # PWA icons in public/
-npm run qr -- https://capgff.github.io/lab-checklist/   # QR sheet in qr/print.html
+npm run icons                                        # PWA icons in public/
+npm run qr                                           # QR sheet in qr/print.html (live URL)
+npm run qr -- https://capg-labff.github.io/lab-checklist/   # or pass an explicit URL
 ```
 
-`npm run qr` writes `qr/print.html` — open it and print (4 cards, one per lab). Pass the **exact
-production URL** you want encoded; the default is the current test URL.
+`npm run qr` writes `qr/print.html` — open it and print (4 cards, one per lab). With no argument it
+uses the live URL (`https://capg-labff.github.io/lab-checklist/`); pass an explicit URL to override.
 
 ## Editing the checklists
 
 Everything is in [`src/config/checklists.ts`](src/config/checklists.ts). Reword a `label` freely;
 never reuse an `id`. See HANDOVER.md for the full procedure and the server-side note.
+
+## Authorship
+
+Built by Hugo Grilo, 2026, for the CAPG-FF lab.
+
+Originally developed at github.com/hugogrilo13/lab-checklist and transferred
+to the lab organisation in August 2026. Full authorship history is preserved
+in the Git commit log.

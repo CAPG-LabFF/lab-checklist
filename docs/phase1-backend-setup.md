@@ -33,7 +33,7 @@ You do these five steps once, in the **dedicated Gmail account** (for the test r
 
 ## Then: the Phase 1 gate
 - Commit + push. The GitHub Action rebuilds and Pages serves the real app.
-- On a **real phone**, open `https://hugogrilo13.github.io/lab-checklist/` and:
+- On a **real phone**, open `https://capg-labff.github.io/lab-checklist/` and:
   - Record an opening → confirm the Sheet gets a row with a server timestamp.
   - Open the same URL on a **second device** → the new state shows within ~30s / on refresh.
   - Record a partial closing → card turns amber, both buttons stay available.

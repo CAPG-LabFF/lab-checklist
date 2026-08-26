@@ -140,7 +140,7 @@ Sign into the Gmail account, open the Apps Script, and run any function once to 
 ## 7. The one rule that breaks everything
 
 **Do not rename the GitHub repository or the organisation.** The site URL
-(`https://<org>.github.io/lab-checklist/`) is encoded in every QR code physically posted in the labs,
+(`https://capg-labff.github.io/lab-checklist/`) is encoded in every QR code physically posted in the labs,
 and the repo name is baked into the build (`vite.config.ts` → `base`). Renaming either silently breaks
 every printed code. If you must move accounts, keep the **repo name identical** — then only the host
 changes, and you regenerate the QR sheet with `npm run qr -- <new-url>` and reprint.
