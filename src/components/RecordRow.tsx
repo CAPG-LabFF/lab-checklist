@@ -49,22 +49,54 @@ export default function RecordRow({ rec }: { rec: LabRecord }) {
               <p className="whitespace-pre-wrap text-slate-700">{rec.comment}</p>
             </div>
           )}
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Checklist as submitted
-            </div>
-            <ul className="mt-1 space-y-0.5">
-              {rec.items.map((it) => (
-                <li key={it.id} className="flex items-start gap-2 text-slate-700">
-                  <span className={it.checked ? 'text-green-600' : 'text-slate-300'}>
-                    {it.checked ? '✓' : '✗'}
-                  </span>
-                  <span>{it.label}</span>
-                </li>
-              ))}
-              {rec.items.length === 0 && <li className="text-slate-400">No snapshot stored.</li>}
-            </ul>
-          </div>
+          {(() => {
+            const notDone = rec.items.filter((it) => !it.checked)
+            return (
+              <>
+                {notDone.length > 0 && (
+                  <div className="rounded-lg bg-amber-50 px-3 py-2">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                      Not done ({notDone.length})
+                    </div>
+                    <ul className="mt-1 space-y-0.5">
+                      {notDone.map((it) => (
+                        <li key={it.id} className="font-medium text-amber-900">
+                          {it.label}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Checklist as submitted
+                  </div>
+                  <ul className="mt-1 space-y-0.5">
+                    {rec.items.map((it) => (
+                      <li
+                        key={it.id}
+                        className={
+                          'flex items-start gap-2 ' +
+                          (it.checked ? 'text-slate-700' : 'font-medium text-amber-900')
+                        }
+                      >
+                        <span className={it.checked ? 'text-green-600' : 'text-amber-600'}>
+                          {it.checked ? '✓' : '✗'}
+                        </span>
+                        <span>{it.label}</span>
+                        {!it.checked && (
+                          <span className="ml-auto shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800">
+                            not done
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                    {rec.items.length === 0 && <li className="text-slate-400">No snapshot stored.</li>}
+                  </ul>
+                </div>
+              </>
+            )
+          })()}
           {rec.flags && Object.keys(rec.flags).length > 0 && (
             <div className="text-xs text-amber-700">
               Flags: {JSON.stringify(rec.flags)}

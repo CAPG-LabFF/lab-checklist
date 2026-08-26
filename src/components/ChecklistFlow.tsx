@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Area, ActionType, LabRecord, SubmittedItem } from '../api/backend'
 import { submit } from '../api/backend'
-import { CHECKLISTS, AREA_NAME, itemCount } from '../config/checklists'
+import { CHECKLISTS, AREA_NAME, itemCount, hasCommentForcingItem } from '../config/checklists'
 import ConfirmModal from './ConfirmModal'
 
 type Props = {
@@ -16,21 +16,32 @@ type Props = {
 export default function ChecklistFlow({ area, action, initials, extraFlags, onDone, onCancel }: Props) {
   const procedure = CHECKLISTS[area][action]
   const total = useMemo(() => itemCount(area, action), [area, action])
+  // Some lists (the closing lists with "overnight reactions are registered")
+  // require a comment even when everything is checked.
+  const forcesComment = useMemo(() => hasCommentForcingItem(area, action), [area, action])
 
   const [checked, setChecked] = useState<Record<string, boolean>>({})
   const [comment, setComment] = useState('')
-  const [partial, setPartial] = useState(false)
-  const [overnight, setOvernight] = useState(false)
 
   const [showConfirm, setShowConfirm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const checkedCount = Object.values(checked).filter(Boolean).length
-  const allChecked = checkedCount === total
-  const commentRequired = (action === 'closing' && partial) || overnight
+  const anyUnchecked = checkedCount < total
+  // A closing with anything unchecked is a partial closing (amber). Openings are
+  // never "partial" — they stay green — but still need a comment when incomplete.
+  const partial = action === 'closing' && anyUnchecked
+  const commentRequired = anyUnchecked || forcesComment
   const commentOk = !commentRequired || comment.trim().length > 0
-  const canSubmit = allChecked && commentOk
+  const canSubmit = commentOk
+
+  const helper = [
+    anyUnchecked ? 'Say exactly what was left undone and why.' : '',
+    forcesComment ? 'Note any overnight reactions left running (or state there are none).' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   function toggle(id: string) {
     setChecked((c) => ({ ...c, [id]: !c[id] }))
@@ -39,15 +50,17 @@ export default function ChecklistFlow({ area, action, initials, extraFlags, onDo
   async function doSubmit() {
     setSubmitting(true)
     setError(null)
+    // Full snapshot INCLUDING unchecked items, so the server can derive `partial`
+    // and Records can show what was skipped.
     const items: SubmittedItem[] = procedure.flatMap((g) =>
-      g.items.map((it) => ({ id: it.id, label: it.label, checked: true })),
+      g.items.map((it) => ({ id: it.id, label: it.label, checked: !!checked[it.id] })),
     )
     try {
       const rec = await submit({
         area,
         action,
-        partial: action === 'closing' ? partial : false,
-        overnight,
+        partial, // server re-derives; sent for an immediate optimistic update
+        overnight: false, // overnight toggle removed; kept as a column, always false
         initials,
         comment: comment.trim(),
         items,
@@ -122,8 +135,9 @@ export default function ChecklistFlow({ area, action, initials, extraFlags, onDo
       {/* Comments */}
       <div>
         <label htmlFor="comment" className="text-sm font-semibold text-slate-700">
-          Comments
+          Comments{commentRequired && <span className="text-amber-700"> (required)</span>}
         </label>
+        {commentRequired && helper && <p className="mt-0.5 text-xs text-amber-700">{helper}</p>}
         <textarea
           id="comment"
           value={comment}
@@ -134,27 +148,12 @@ export default function ChecklistFlow({ area, action, initials, extraFlags, onDo
         />
       </div>
 
-      {/* Closing-only toggles */}
-      {action === 'closing' && (
-        <div className="space-y-2">
-          <Toggle
-            label="Lab partially closed"
-            help="One or more items left pending — explain which in the comments."
-            on={partial}
-            onChange={setPartial}
-          />
-          <Toggle
-            label="Overnight reaction running"
-            help="A reaction is left running — note what and any safety detail in the comments."
-            on={overnight}
-            onChange={setOvernight}
-          />
-          {commentRequired && !commentOk && (
-            <p className="text-sm font-medium text-amber-700">
-              A comment is required when this is ticked.
-            </p>
-          )}
-        </div>
+      {/* What this submission will be recorded as */}
+      {partial && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {total - checkedCount} item{total - checkedCount === 1 ? '' : 's'} unchecked — this will be
+          recorded as <b>partially closed</b> (amber).
+        </p>
       )}
 
       {/* Actions */}
@@ -170,9 +169,14 @@ export default function ChecklistFlow({ area, action, initials, extraFlags, onDo
           disabled={!canSubmit}
           className="flex-1 rounded-xl bg-slate-900 py-4 text-lg font-semibold text-white disabled:opacity-40"
         >
-          {allChecked ? 'Submit' : `${total - checkedCount} left`}
+          Submit
         </button>
       </div>
+      {!commentOk && (
+        <p className="-mt-2 text-center text-sm font-medium text-amber-700">
+          A comment is required before you can submit.
+        </p>
+      )}
 
       {showConfirm && (
         <ConfirmModal
@@ -188,24 +192,5 @@ export default function ChecklistFlow({ area, action, initials, extraFlags, onDo
         />
       )}
     </div>
-  )
-}
-
-function Toggle({
-  label, help, on, onChange,
-}: { label: string; help: string; on: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <label className="flex items-start gap-3 rounded-lg border border-slate-200 p-3">
-      <input
-        type="checkbox"
-        checked={on}
-        onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-5 w-5 shrink-0"
-      />
-      <span>
-        <span className="font-medium text-slate-800">{label}</span>
-        <span className="block text-xs text-slate-500">{help}</span>
-      </span>
-    </label>
   )
 }

@@ -75,22 +75,16 @@ Apps Script.
 
 ---
 
-## 4. Add or remove an email subscriber by hand
+## 4. Email notifications — REMOVED
 
-Open the **`Subscribers`** tab in the Sheet.
+The email-subscription feature was removed. There is no subscription box, no `subscribe`/`unsubscribe`
+route, no notifier, and no `MailApp` use anywhere. The **`Subscribers`** tab and the Records
+`notified` column were **left in place** (append-only discipline) but are unused and never written to
+by the app — do not rely on them, and do not delete them.
 
-- **Add:** append a row —
-  `id` = any unique text, `email`, `areas` = `all` or comma-separated keys
-  (`general,big_lab,small_lab_gc,bromo_lab`), `token` = any unique text, `created_at` = any date,
-  `active` = `TRUE`.
-- **Remove / pause:** set that row's `active` to `FALSE` (keep the row for history), or delete the row.
-
-Subscribers can also add themselves from the app's Home screen, and every notification email carries a
-one-click unsubscribe link.
-
-Emails are sent by a **time-based trigger every 5 minutes** (`sendPendingNotifications` in the Apps
-Script). A consumer Google account allows 100 email recipients/day; the job checks the remaining quota
-and defers rather than dropping messages if it ever runs low.
+If you ever see Google sending 5-minute failure notices from this project, it means an old
+**time-based trigger** (`sendPendingNotifications`) is still installed: Apps Script editor → clock
+icon (Triggers) → delete it, signed in as the owning account.
 
 ---
 
@@ -125,12 +119,8 @@ This keeps the `/exec` URL identical, so the app and the printed QR codes keep w
 - Open the `/exec` URL with `?route=state` appended in a browser — it should return JSON. If it asks
   for authorization or errors, re-check the deployment is **Execute as: Me / Who has access: Anyone**.
 
-**Submissions work but no emails arrive:**
-- Apps Script → clock icon (**Triggers**) → confirm `sendPendingNotifications` runs every 5 minutes.
-  If missing, run the function `installNotificationTrigger` once.
-- Check the `Subscribers` tab has the address with `active = TRUE`.
-- Check the account hasn't hit the 100-recipient daily quota (it recovers next day).
-- Confirm the `Subscribers` tab exists; if not, run `setupSubscribers` once.
+**Google sends failure notices every 5 minutes:** an old email trigger is still installed. Apps
+Script → clock icon (**Triggers**) → delete `sendPendingNotifications`. (Email was removed; see §4.)
 
 **Nothing writes / "system is busy" errors:** the Sheet or Apps Script authorization may have lapsed.
 Sign into the Gmail account, open the Apps Script, and run any function once to re-authorize.

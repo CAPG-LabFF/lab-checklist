@@ -1,5 +1,10 @@
 # Phase 2 — Backend setup (Records already works; this enables emails)
 
+> ⚠️ **RETIRED.** Email subscriptions were removed from the app. This document is kept only as a
+> historical record of how the (now-deleted) notification feature was set up. The Records-page setup
+> notes below still apply; the email/subscriber steps do not. See
+> [partial-rework-golive.md](partial-rework-golive.md) for the removal.
+
 The Records page reads through the **existing** deployment, so it works as soon as you push the
 Phase 2 frontend. These steps only enable **email notifications + subscriptions**.
 

@@ -114,14 +114,8 @@ export async function submit(record: SubmitInput): Promise<LabRecord> {
   return post<LabRecord>({ route: 'submit', record })
 }
 
-/** Subscribe an email to per-submission alerts for the given areas ('all' or keys). */
-export async function subscribe(
-  email: string,
-  areas: Area[] | 'all',
-): Promise<{ ok: true }> {
-  if (useMock) return (await mock()).subscribe()
-  return post({ route: 'subscribe', email, areas })
-}
+// Email subscriptions were removed. The Subscribers sheet and the Records
+// `notified` column are intentionally left in place (append-only), just unused.
 
 // ---- Presence ("In Lab" board) --------------------------------------------
 // Independent of the checklists. The server records times for traceability but

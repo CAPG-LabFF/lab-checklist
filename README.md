@@ -13,7 +13,7 @@ timestamped server-side and permanently logged to a Google Sheet.
 > is baked into `vite.config.ts` (`base`) and the manifest.
 
 New here? Read **[HANDOVER.md](HANDOVER.md)** first — it explains ownership, credentials, and the
-day-to-day tasks (change a checklist item, add a subscriber, fix a broken deploy).
+day-to-day tasks (change a checklist item, fix a broken deploy).
 
 ---
 
@@ -24,7 +24,6 @@ day-to-day tasks (change a checklist item, add a subscriber, fix a broken deploy
 | Frontend | React + TypeScript + Vite + Tailwind, static bundle | Loads in under a second; hosted **in the repo** via GitHub Pages, so code + deploy + docs live in one place a successor can find. |
 | Backend | Google Apps Script Web App (`doGet`/`doPost`) | Free, no server, writes to a Sheet with `LockService` for safe concurrent appends. |
 | Database | Google Sheet | Permanently readable/filterable/printable by anyone with the link. No dashboard, no vendor account, no expiry. |
-| Email | `MailApp` on a 5-minute trigger | One call, no third-party service, no DNS. |
 
 **Security, stated honestly:** there is no login, so the Apps Script `/exec` URL is reachable by
 anyone who finds it, and on a public repo it is findable. This is inherent to the "no login"
@@ -48,7 +47,7 @@ src/
   lib/                  time (Europe/Lisbon), stateMachine, csv
 apps-script/Code.gs     Paste this into the Sheet's Apps Script editor. The backend.
 scripts/                generate-icons.mjs, generate-qr.mjs (run manually; see below)
-docs/                   Step-by-step backend setup for Phase 1 (core) and Phase 2 (email)
+docs/                   Backend setup + go-live/rollback notes (phase2 email doc is retired)
 .github/workflows/      deploy.yml — builds and publishes to Pages on push to main
 ```
 
@@ -103,8 +102,8 @@ it points at the new assets. It self-heals.
 
 ## Backend (Apps Script) — first-time setup and redeploys
 
-Full steps are in [docs/phase1-backend-setup.md](docs/phase1-backend-setup.md) (core) and
-[docs/phase2-backend-setup.md](docs/phase2-backend-setup.md) (email). The rule that matters most:
+Full steps are in [docs/phase1-backend-setup.md](docs/phase1-backend-setup.md) (core). (The Phase 2
+email doc is retired — email subscriptions were removed.) The rule that matters most:
 
 > **To update the backend, edit the EXISTING deployment → Version: New version.**
 > Never create a *New deployment* — that mints a new `/exec` URL and breaks every printed QR code.

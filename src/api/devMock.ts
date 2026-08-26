@@ -5,6 +5,7 @@
 
 import type { AreaState, LabRecord, SubmitInput, Area, PresenceEntry } from './backend'
 import { lisbonDay } from '../lib/time'
+import { COMMENT_FORCING_ITEM_IDS } from '../config/checklists'
 
 function iso(offsetMs: number): string {
   return new Date(Date.now() - offsetMs).toISOString()
@@ -65,13 +66,21 @@ export function getRecords(area: Area, cursor?: string) {
 }
 
 export function submit(record: SubmitInput): Promise<LabRecord> {
+  // Mirror Code.gs: derive partial + the comment rule server-side, never trust
+  // the client's flag. Lets the UI dev-run exercise the real acceptance rules.
+  const anyUnchecked = record.items.some((it) => it.checked !== true)
+  const hasForcingItem = record.items.some((it) => COMMENT_FORCING_ITEM_IDS.has(it.id))
+  const commentRequired = anyUnchecked || (record.action === 'closing' && hasForcingItem)
+  if (commentRequired && !(record.comment && record.comment.trim())) {
+    return Promise.reject(new Error('A comment is required for this submission.'))
+  }
   const stored: LabRecord = {
     id: uuid(),
     timestamp: new Date().toISOString(),
     area: record.area,
     action: record.action,
-    partial: !!record.partial,
-    overnight: !!record.overnight,
+    partial: record.action === 'closing' && anyUnchecked, // derived, not from client
+    overnight: false,
     initials: record.initials.toUpperCase(),
     comment: record.comment ?? '',
     items: record.items,
@@ -79,10 +88,6 @@ export function submit(record: SubmitInput): Promise<LabRecord> {
   }
   store.push(stored)
   return delay(stored)
-}
-
-export function subscribe() {
-  return delay({ ok: true as const })
 }
 
 // ---- Presence mock (mirrors Code.gs computePresent, incl. the reset hour) ---

@@ -7,7 +7,6 @@ import { useAreaStates } from '../hooks/useAreaStates'
 import InitialsBar from './InitialsBar'
 import AreaCard from './AreaCard'
 import ChecklistFlow from './ChecklistFlow'
-import SubscriptionBox from './SubscriptionBox'
 
 type Flow = { area: Area; action: ActionType; extraFlags?: Record<string, unknown> }
 
@@ -97,8 +96,6 @@ export default function Home() {
               />
             )
           })}
-
-        {states && <SubscriptionBox />}
       </div>
 
       {toast && (
