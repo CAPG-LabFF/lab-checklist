@@ -74,7 +74,11 @@ async function post<T>(payload: unknown): Promise<T> {
     redirect: 'follow',
   })
   if (!res.ok) throw new Error(`Server error ${res.status}`)
-  return (await res.json()) as T
+  // Apps Script returns HTTP 200 even for rejections, carrying { error }. Surface
+  // it as a thrown error so callers see the message instead of a fake record.
+  const data = (await res.json()) as T & { error?: string }
+  if (data && data.error) throw new Error(data.error)
+  return data as T
 }
 
 async function get<T>(params: Record<string, string>): Promise<T> {
@@ -83,7 +87,9 @@ async function get<T>(params: Record<string, string>): Promise<T> {
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
   const res = await fetch(url.toString(), { redirect: 'follow' })
   if (!res.ok) throw new Error(`Server error ${res.status}`)
-  return (await res.json()) as T
+  const data = (await res.json()) as T & { error?: string }
+  if (data && data.error) throw new Error(data.error)
+  return data as T
 }
 
 // In dev with no EXEC_URL set, fall back to an in-memory mock so the UI is
