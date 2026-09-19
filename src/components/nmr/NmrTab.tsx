@@ -4,6 +4,8 @@ import { useNmrOptions } from '../../hooks/useNmr'
 import InitialsBar from '../InitialsBar'
 import ScheduleView from './ScheduleView'
 import SubmissionForm from './SubmissionForm'
+import SubmittedQueue from './SubmittedQueue'
+import CompletedList from './CompletedList'
 
 export default function NmrTab() {
   const { initials, setInitials, clear, valid } = useInitials()
@@ -21,6 +23,12 @@ export default function NmrTab() {
         </Section>
         <Section title="Submission — Long experiments">
           <SubmissionForm type="long" options={options} initials={initials} initialsValid={valid} />
+        </Section>
+        <Section title="Submitted">
+          <SubmittedQueue initials={initials} initialsValid={valid} />
+        </Section>
+        <Section title="Completed">
+          <CompletedList initials={initials} initialsValid={valid} />
         </Section>
       </div>
     </>
