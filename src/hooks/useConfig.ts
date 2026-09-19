@@ -30,22 +30,32 @@ export function useConfig() {
   const refresh = useCallback(async () => {
     if (inFlight.current) return
     inFlight.current = true
-    try {
-      const fresh = await getConfig()
-      setConfig(fresh)
-      setError(null)
+    setLoading(true)
+    let lastErr: unknown
+    // Apps Script /exec is flaky (transient 302/CORS/404s). Retry with backoff
+    // before giving up, so a single blip never leaves the app "unavailable".
+    // A cached config stays in place throughout, so returning users see no change.
+    for (let attempt = 0; attempt < 4; attempt++) {
       try {
-        localStorage.setItem(CACHE_KEY, JSON.stringify(fresh))
-      } catch {
-        /* storage disabled — non-fatal */
+        const fresh = await getConfig()
+        setConfig(fresh)
+        setError(null)
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify(fresh))
+        } catch {
+          /* storage disabled — non-fatal */
+        }
+        inFlight.current = false
+        setLoading(false)
+        return
+      } catch (e) {
+        lastErr = e
+        await new Promise((r) => setTimeout(r, 600 * (attempt + 1)))
       }
-    } catch (e) {
-      // Keep whatever is cached; only surface an error when we have nothing.
-      setError(e instanceof Error ? e.message : 'Could not load the checklist configuration.')
-    } finally {
-      inFlight.current = false
-      setLoading(false)
     }
+    setError(lastErr instanceof Error ? lastErr.message : 'Could not load the checklist configuration.')
+    inFlight.current = false
+    setLoading(false)
   }, [])
 
   useEffect(() => {

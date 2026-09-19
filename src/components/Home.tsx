@@ -14,7 +14,7 @@ type Flow = { area: Area; action: ActionType; procedure: ConfigProcedure; extraF
 export default function Home() {
   const { initials, setInitials, clear, valid } = useInitials()
   const { states, refreshing, error, everLoaded, refresh } = useAreaStates()
-  const { config, error: configError, refresh: refreshConfig } = useConfig()
+  const { config, loading: configLoading, error: configError, refresh: refreshConfig } = useConfig()
 
   const [expanded, setExpanded] = useState<Area | null>(null)
   const [flow, setFlow] = useState<Flow | null>(null)
@@ -72,8 +72,16 @@ export default function Home() {
           {refreshing ? 'Refreshing…' : showStaleWarning ? '' : null}
         </div>
 
-        {/* Config unavailable → cannot record safely; block rather than show empty lists. */}
-        {!configReady && (
+        {/* While the first fetch is still trying (no cached config yet), show a
+            neutral loading state — not the alarming "disabled" block. */}
+        {!configReady && configLoading && (
+          <div className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600">
+            Loading checklist…
+          </div>
+        )}
+
+        {/* Only a genuine failure with nothing cached blocks recording. */}
+        {!configReady && !configLoading && (
           <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
             Checklist configuration unavailable — recording is disabled right now.{' '}
             <button onClick={refreshConfig} className="underline">Retry</button>
