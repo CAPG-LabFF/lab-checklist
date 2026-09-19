@@ -583,3 +583,112 @@ function installChecklistsTrigger() {
     if (triggers[i].getHandlerFunction() === 'publishChecklists') ScriptApp.deleteTrigger(triggers[i])
   ScriptApp.newTrigger('publishChecklists').timeBased().everyDays(1).atHour(CONFIG_PUBLISH_HOUR).create()
 }
+
+/**
+ * Idempotent: (re)builds a plain-language `README` tab that teaches a lab member
+ * how to edit the Checklists tab safely. Reproducible from code — re-run any time
+ * to refresh it. Run on staging first, then production. Editor-run only (no HTTP
+ * route), so it needs no redeployment.
+ */
+function setupReadmeTab() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+  var sh = ss.getSheetByName('README') || ss.insertSheet('README')
+  sh.clear()
+  var existing = sh.getProtections(SpreadsheetApp.ProtectionType.SHEET)
+  for (var i = 0; i < existing.length; i++) existing[i].remove()
+
+  var TITLE = 'How to edit the Checklists tab — please read first'
+
+  // Content blocks, in order. { t: text, h: true for a bold heading }. The
+  // string EXAMPLE_MARKER is replaced by a small real table.
+  var EXAMPLE_MARKER = '@@EXAMPLE@@'
+  var blocks = [
+    { t: 'The most important thing first', h: true },
+    { t: 'Changes you make in the Checklists tab do NOT appear in the app straight away. They go live at the next daily update, at midnight (00:00, Lisbon time). If you change something and it has not appeared yet, that is normal — wait for the nightly update, or ask whoever manages the system to run the update now. This is the single most common thing people mistake for a bug.' },
+
+    { t: 'What this tab is', h: true },
+    { t: 'The Checklists tab is the master list of every item people tick off when they open or close a lab. Editing it changes what appears on everyone’s phone (after the nightly update). This page explains how to edit it safely. You do not need to understand anything technical.' },
+
+    { t: 'The columns, one by one', h: true },
+    { t: 'id  —  Leave this BLANK on a new row. The system fills it in automatically at the next update. Never type in it, never change it, never delete it, and never reuse an old one. Past records point to these ids, so changing an id would scramble old history.' },
+    { t: 'area  —  Which lab the item belongs to. Always choose from the dropdown in the cell. Never type it by hand.' },
+    { t: 'procedure  —  Whether the item is for "opening" or "closing". Always choose from the dropdown. Never type it by hand.' },
+    { t: 'group  —  The section heading the item appears under (for example, "Turn OFF Rotavaps"). Type it EXACTLY the same as the other rows in that section — same spelling, same capitalisation. If it does not match, the item will appear in a little section of its own.' },
+    { t: 'label  —  The words the person reads on their phone (for example, "Check the UV Lamp is turned OFF").' },
+
+    { t: 'Row order is the order on the phone', h: true },
+    { t: 'Items appear in the same order as the rows here. To place a new item where you want it to show up, put its row in that position (you can drag rows up and down to reorder them).' },
+
+    { t: 'A worked example', h: true },
+    { t: 'Here is one filled-in row. Notice the id is left blank — the system will fill it in:' },
+    { t: EXAMPLE_MARKER },
+
+    { t: 'How to add an item', h: true },
+    { t: 'Add a new row where you want it to appear. Leave id blank. Choose area and procedure from the dropdowns. Type the group (matching the section heading exactly) and the label. That is all — it goes live at the next nightly update.' },
+
+    { t: 'How to reword an item', h: true },
+    { t: 'Edit the label cell only. Leave the id exactly as it is. Changing the wording keeps the same item, and keeping the id keeps the history correct.' },
+
+    { t: 'How to remove an item', h: true },
+    { t: 'Delete the whole row. That is all. Records that already used that item are not affected (see "Your past records are safe" below).' },
+
+    { t: 'If you make a mistake, nothing breaks', h: true },
+    { t: 'Before each nightly update the system checks the whole tab. If anything is filled in wrongly, it does NOT publish — the previous day’s checklist simply stays in force until the problem is fixed. A mistake here only delays a change; it never breaks the app and never leaves a lab with an empty checklist. So do not be afraid to edit.' },
+
+    { t: 'Two things never to do', h: true },
+    { t: '1.  Never leave any lab with no items for opening, or no items for closing. Every lab needs at least one opening item and one closing item, or the update will refuse to publish.' },
+    { t: '2.  Never edit or clear the id column.' },
+
+    { t: 'Your past records are safe', h: true },
+    { t: 'Every time someone submits a checklist, the app stores its own copy of exactly what the list looked like at that moment. Editing this tab only changes the list from now on — it never rewrites or affects records that were already submitted.' },
+
+    { t: '"My change did not appear" — what to check', h: true },
+    { t: '1.  Has the nightly update run since you made the change? Changes only appear after the 00:00 update (or after someone runs the update by hand).' },
+    { t: '2.  Is there an invalid row somewhere? If any row is wrong, the whole update is held back and the old checklist stays. Look for a blank label, an area or procedure that was typed instead of chosen from the dropdown, or a lab left with no items — fix it, then wait for the next update.' },
+
+    { t: 'Who may edit this tab', h: true },
+    { t: 'Only the lab account, and anyone it has explicitly shared editing with. If you cannot edit and think you should be able to, that is deliberate — ask whoever holds the lab account.' },
+
+    { t: 'Anything beyond checklist edits', h: true },
+    { t: 'See the file HANDOVER.md in the project’s code repository. It covers the accounts, the app, the "In Lab" board, and what to do if the site or the daily updates ever stop working.' },
+  ]
+
+  // Title row (frozen).
+  sh.getRange(1, 1).setValue(TITLE)
+  var row = 3 // leave row 2 blank as breathing space under the title
+  var headingRows = []
+  for (var b = 0; b < blocks.length; b++) {
+    if (blocks[b].t === EXAMPLE_MARKER) {
+      // A small real table with the actual column headers.
+      sh.getRange(row, 1, 1, 5).setValues([CHECKLISTS_COLUMNS])
+      sh.getRange(row + 1, 1, 1, 5).setValues([['', 'big_lab', 'closing', 'UV Lamp', 'Check the UV Lamp is turned OFF']])
+      sh.getRange(row, 1, 1, 5).setFontWeight('bold').setBackground('#e8eaed')
+      sh.getRange(row, 1, 2, 5).setBorder(true, true, true, true, true, true)
+      sh.getRange(row, 1, 2, 5).setVerticalAlignment('middle')
+      sh.getRange(row + 1, 1).setBackground('#fff8e1') // highlight the blank id cell
+      row += 3 // table (2 rows) + a blank spacer
+    } else {
+      var cell = sh.getRange(row, 1)
+      cell.setValue(blocks[b].t)
+      if (blocks[b].h) headingRows.push(row)
+      row += 1
+    }
+  }
+
+  // Layout + typography for spreadsheet reading.
+  sh.setFrozenRows(1)
+  sh.setColumnWidth(1, 760)
+  sh.setColumnWidths(2, 4, 150)
+  sh.getRange(1, 1, row, 6).setWrap(true).setVerticalAlignment('top')
+  sh.getRange(1, 1).setFontSize(15).setFontWeight('bold').setBackground('#0f172a').setFontColor('#ffffff')
+  sh.setRowHeight(1, 40)
+  for (var h = 0; h < headingRows.length; h++) {
+    sh.getRange(headingRows[h], 1).setFontWeight('bold').setFontSize(12)
+  }
+
+  // Prevent accidental edits. Warning-only so it can never lock out whoever
+  // operates the sheet and needs no account email. To hard-lock to the lab
+  // account only, add an editor restriction the same way as the Checklists tab
+  // (Data -> Protect sheets and ranges), done once from the lab account.
+  sh.protect().setDescription('README (generated by setupReadmeTab) — do not edit by hand').setWarningOnly(true)
+}

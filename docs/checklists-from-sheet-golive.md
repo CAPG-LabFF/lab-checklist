@@ -18,6 +18,8 @@ Decisions baked in: edit access = **lab account only**; removing an item = **del
 2. Paste this branch's [`apps-script/Code.gs`](../apps-script/Code.gs) into the copy's script → Save.
 3. Run **`setupChecklists()`** → confirm a `Checklists` tab (with `area`/`procedure` dropdowns) and a
    `ChecklistsPublished` tab appear. `Records` and `Presence` untouched.
+   Also run **`setupReadmeTab()`** → creates a plain-language `README` tab explaining how to edit the
+   checklists. Re-runnable any time to refresh it.
 4. Generate the seed: `npm run seed:checklists` → **`checklists-seed.tsv`**. Paste it into the
    `Checklists` tab **starting at cell A2** (row 1 is the header). 75 rows.
 5. Run **`publishChecklists()`** → it writes the first `ok` snapshot to `ChecklistsPublished`.
@@ -40,7 +42,7 @@ Clear `.env.local` (or leave it; gitignored) when done.
 1. **Live script:** paste this branch's `Code.gs` → Save → **Deploy → Manage deployments → edit the
    existing deployment → New version**. `/exec` URL unchanged. (The old static-checklist frontend is
    still live and unaffected — it doesn't call `route=config`.)
-2. Run **`setupChecklists()`** on the live Sheet.
+2. Run **`setupChecklists()`** and **`setupReadmeTab()`** on the live Sheet.
 3. Paste `checklists-seed.tsv` into the live `Checklists` tab at **A2**.
 4. Run **`publishChecklists()`** on the live Sheet.
 5. `npm run diff:config -- <live /exec>` → must print **PASS** before the frontend switches over.
