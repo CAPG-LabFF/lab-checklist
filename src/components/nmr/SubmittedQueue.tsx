@@ -2,15 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { NmrQueueItem } from '../../api/backend'
 import { getNmrQueue, completeNmr } from '../../api/backend'
 
-function waited(iso: string): string {
-  const min = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000))
-  if (min < 60) return `${min}m`
-  const h = Math.floor(min / 60)
-  if (h < 24) return min % 60 ? `${h}h ${min % 60}m` : `${h}h`
-  const d = Math.floor(h / 24)
-  return `${d}d ${h % 24}h`
-}
-
 type Props = { initials: string; initialsValid: boolean }
 
 export default function SubmittedQueue({ initials, initialsValid }: Props) {
@@ -98,74 +89,78 @@ function QueueRow({
     }
   }
 
+  const [open, setOpen] = useState(false)
+  const noteCount = item.events.filter((e) => e.notes).length
+
   return (
-    <div className={'overflow-hidden rounded-xl border-l-4 bg-white shadow-sm ' + (isLong ? 'border-violet-500' : 'border-sky-500')}>
-      <div className="px-3 py-3">
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className={'rounded px-1.5 py-0.5 text-xs font-bold ' + (isLong ? 'bg-violet-100 text-violet-800' : 'bg-sky-100 text-sky-800')}>
-            {isLong ? 'LONG' : '1H'}
-          </span>
-          <span className="font-semibold text-slate-900">{s.sample_name}</span>
-          <span className="text-slate-400">·</span>
-          <span className="font-medium">{s.initials}</span>
-          <span className="text-slate-400">·</span>
-          <span>{s.lab}</span>
-          <span className="ml-auto text-xs text-slate-500">waiting {waited(s.timestamp)}</span>
-        </div>
+    <div className={'overflow-hidden rounded-lg border-l-4 border border-slate-200 bg-white ' + (isLong ? 'border-l-violet-500' : 'border-l-sky-500')}>
+      {/* Compact one-line summary — the list stays scannable at 20–30 samples. */}
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm">
+        <span className={'shrink-0 rounded px-1.5 py-0.5 text-xs font-bold ' + (isLong ? 'bg-violet-100 text-violet-800' : 'bg-sky-100 text-sky-800')}>
+          {isLong ? 'LONG' : '1H'}
+        </span>
+        <span className="truncate font-semibold text-slate-900">{s.sample_name}</span>
+        <span className="shrink-0 text-slate-500">{s.initials} · {s.lab}</span>
+        {noteCount > 0 && <span className="shrink-0 rounded bg-slate-100 px-1 text-xs text-slate-500" title="operator notes">✎{noteCount}</span>}
+        <span className="ml-auto shrink-0 text-slate-400">{open ? '▲' : '▼'}</span>
+      </button>
 
-        <div className="mt-1 text-sm text-slate-600">
-          Solvent: <span className="text-slate-800">{s.solvent}</span>
-          {isLong && s.experiments.length > 0 && <> · {s.experiments.join(', ')}</>}
-          {isLong && (s.quantity || s.mw) && <> · {s.quantity} mg · MW {s.mw}</>}
-        </div>
-        {s.notes && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">“{s.notes}”</p>}
-
-        {item.events.filter((e) => e.notes).length > 0 && (
-          <div className="mt-2 space-y-0.5 rounded-lg bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
-            {item.events
-              .filter((e) => e.notes)
-              .map((e) => (
-                <div key={e.id}>
-                  <span className="font-semibold">{e.operator}</span>
-                  {e.status === 'reopened' ? ' (reopened)' : ''}: {e.notes}
-                </div>
-              ))}
+      {open && (
+        <div className="space-y-2 border-t border-slate-100 px-3 py-3">
+          <div className="text-sm text-slate-600">
+            Solvent: <span className="text-slate-800">{s.solvent}</span>
+            {isLong && s.experiments.length > 0 && <> · {s.experiments.join(', ')}</>}
+            {isLong && (s.quantity || s.mw) && <> · {s.quantity} mg · MW {s.mw}</>}
           </div>
-        )}
+          {s.notes && <p className="whitespace-pre-wrap text-sm text-slate-700">“{s.notes}”</p>}
 
-        <textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          rows={2}
-          placeholder="Operator note (e.g. shimming failed, too dilute)…"
-          className="mt-2 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-900 focus:outline-none"
-        />
-        {err && <p className="mt-1 text-xs font-medium text-red-700">{err}</p>}
+          {noteCount > 0 && (
+            <div className="space-y-0.5 rounded-lg bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
+              {item.events
+                .filter((e) => e.notes)
+                .map((e) => (
+                  <div key={e.id}>
+                    <span className="font-semibold">{e.operator}</span>
+                    {e.status === 'reopened' ? ' (reopened)' : ''}: {e.notes}
+                  </div>
+                ))}
+            </div>
+          )}
 
-        <div className="mt-2 flex flex-wrap gap-2">
-          <button
-            onClick={() => act('done')}
-            disabled={!initialsValid || busy}
-            className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
-          >
-            {busy ? '…' : 'Mark done'}
-          </button>
-          <button
-            onClick={() => act('note')}
-            disabled={!initialsValid || busy}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40"
-          >
-            Add note
-          </button>
-          <button
-            onClick={() => act('cancelled')}
-            disabled={!initialsValid || busy}
-            className="ml-auto rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-500 disabled:opacity-40"
-          >
-            Withdraw
-          </button>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={2}
+            placeholder="Operator note (e.g. shimming failed, too dilute)…"
+            className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-900 focus:outline-none"
+          />
+          {err && <p className="text-xs font-medium text-red-700">{err}</p>}
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => act('done')}
+              disabled={!initialsValid || busy}
+              className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+            >
+              {busy ? '…' : 'Mark done'}
+            </button>
+            <button
+              onClick={() => act('note')}
+              disabled={!initialsValid || busy}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40"
+            >
+              Add note
+            </button>
+            <button
+              onClick={() => act('cancelled')}
+              disabled={!initialsValid || busy}
+              className="ml-auto rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-500 disabled:opacity-40"
+            >
+              Withdraw
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
