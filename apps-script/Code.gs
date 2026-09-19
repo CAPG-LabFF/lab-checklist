@@ -755,10 +755,11 @@ function setupNmr() {
   // NMRSchedule (grid). Seed a Mon–Fri skeleton with a couple of slots to edit.
   if (!ss.getSheetByName(NMR_SCHEDULE_NAME)) {
     var sch = ss.insertSheet(NMR_SCHEDULE_NAME)
+    sch.getRange('A:F').setNumberFormat('@') // plain text — no "08:30" → 1899 Date coercion
     sch.getRange(1, 1, 3, 6).setValues([
       ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-      ['08:30', '', '', '', '', ''],
-      ['11:30', '', '', '', '', ''],
+      ['Manhã', '', '', '', '', ''],
+      ['Tarde', '', '', '', '', ''],
     ])
     sch.setFrozenRows(1)
     sch.setFrozenColumns(1)
@@ -835,16 +836,18 @@ function getNmrSchedule() {
   if (!sh) return { days: [], slots: [] }
   var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn()
   if (lastRow < 2 || lastCol < 2) return { days: [], slots: [] }
-  var grid = sh.getRange(1, 1, lastRow, lastCol).getValues()
+  // Display values: exactly what the cells show in the Sheet, so a time cell
+  // reads "08:30" (not a raw 1899 Date) and text like "Manhã" comes through as-is.
+  var grid = sh.getRange(1, 1, lastRow, lastCol).getDisplayValues()
   var days = []
   for (var c = 1; c < lastCol; c++) days.push(String(grid[0][c]).trim())
   var slots = []
   for (var r = 1; r < lastRow; r++) {
-    var time = String(grid[r][0]).trim()
-    if (!time) continue
+    var slot = String(grid[r][0]).trim()
+    if (!slot) continue
     var byDay = {}
     for (var c2 = 1; c2 < lastCol; c2++) byDay[days[c2 - 1]] = String(grid[r][c2]).trim()
-    slots.push({ time: time, byDay: byDay })
+    slots.push({ time: slot, byDay: byDay })
   }
   return { days: days, slots: slots }
 }
