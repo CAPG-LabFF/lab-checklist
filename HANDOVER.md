@@ -75,6 +75,12 @@ next run (or run `publishChecklists()` again).
   editing it does nothing at runtime.
 - To re-generate the seed rows from it: `npm run seed:checklists` → `checklists-seed.tsv`.
 
+> **The daily 00:00 publish trigger must be owned by the LAB account.** Apps Script triggers belong to
+> whoever creates them, run under that person's authorization, and send failure notices to that person
+> — so a trigger created by an individual dies when they leave. Create/recreate it only while signed in
+> as the lab account: open the Apps Script project → run `installChecklistsTrigger()` once → confirm it
+> under the clock icon (Triggers). If checklist edits stop going live at 00:00, check this first.
+
 ---
 
 ## 4. Email notifications — REMOVED
