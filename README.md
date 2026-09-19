@@ -121,8 +121,15 @@ uses the live URL (`https://capg-labff.github.io/lab-checklist/`); pass an expli
 
 ## Editing the checklists
 
-Everything is in [`src/config/checklists.ts`](src/config/checklists.ts). Reword a `label` freely;
-never reuse an `id`. See HANDOVER.md for the full procedure and the server-side note.
+Checklists are edited in the Google Sheet's **`Checklists`** tab (not in code). A daily 00:00
+Europe/Lisbon trigger validates the tab and publishes an atomic snapshot to `ChecklistsPublished`; the
+app reads only that snapshot via `route=config`, caches it, and never renders an empty checklist. See
+**HANDOVER.md** for the day-to-day steps and [docs/checklists-from-sheet-golive.md](docs/checklists-from-sheet-golive.md)
+for setup/go-live.
+
+`src/config/checklists.ts` is now the **non-authoritative seed** (it seeded the tab and holds the
+shared TS types); `npm run seed:checklists` regenerates the seed rows, and `npm run diff:config -- <exec-url>`
+checks a published snapshot against it item-for-item.
 
 ## Authorship
 

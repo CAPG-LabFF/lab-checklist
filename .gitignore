@@ -2,6 +2,7 @@ node_modules
 dist
 dist-ssr
 qr
+checklists-seed.tsv
 *.local
 .DS_Store
 .vscode/*

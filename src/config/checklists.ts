@@ -1,13 +1,15 @@
 // ---------------------------------------------------------------------------
-// checklists.ts — THE ONE FILE to edit when a checklist item changes.
+// checklists.ts — SEED ONLY. No longer authoritative at runtime.
 //
-// Rules for a successor:
-//  - Item `id`s are STABLE and NEVER reused. To reword an item, change its
-//    `label` only. To remove one, delete the line. To add one, invent a NEW id.
-//  - `label` is what the user reads; `id` is what history is keyed on. Records
-//    store a snapshot at submission time, so editing here never rewrites the past.
-//  - The Apps Script backend validates against the ids it knows (mirror in Code.gs),
-//    so if you add an item here, add its id to the server list too.
+// The live checklists now come from the Google Sheet `Checklists` tab, published
+// daily as a snapshot the app fetches via route=config. Editing THIS file does
+// NOT change what the app shows — edit the Sheet instead (see HANDOVER.md).
+//
+// This file remains as: (1) the migration seed (scripts/seed-checklists.mjs turns
+// it into the initial `Checklists` rows), (2) a code-reviewed record of the
+// original content, and (3) the shared TS types + the fixed area list/names.
+//
+// Item `id`s are STABLE and NEVER reused — historical records reference them.
 // ---------------------------------------------------------------------------
 
 import type { Area, ActionType } from '../api/backend'

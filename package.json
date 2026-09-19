@@ -8,7 +8,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "icons": "node scripts/generate-icons.mjs",
-    "qr": "node scripts/generate-qr.mjs"
+    "qr": "node scripts/generate-qr.mjs",
+    "seed:checklists": "node scripts/seed-checklists.mjs",
+    "diff:config": "node scripts/diff-config.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

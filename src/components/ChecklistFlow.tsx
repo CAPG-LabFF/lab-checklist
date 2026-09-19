@@ -1,21 +1,22 @@
 import { useMemo, useState } from 'react'
-import type { Area, ActionType, LabRecord, SubmittedItem } from '../api/backend'
+import type { Area, ActionType, LabRecord, SubmittedItem, ConfigProcedure } from '../api/backend'
 import { submit } from '../api/backend'
-import { CHECKLISTS, AREA_NAME, itemCount } from '../config/checklists'
+import { AREA_NAME } from '../config/checklists'
 import ConfirmModal from './ConfirmModal'
 
 type Props = {
   area: Area
   action: ActionType
+  // The checklist to render, from the published config (never the static seed).
+  procedure: ConfigProcedure
   initials: string
   extraFlags?: Record<string, unknown>
   onDone: (rec: LabRecord) => void
   onCancel: () => void
 }
 
-export default function ChecklistFlow({ area, action, initials, extraFlags, onDone, onCancel }: Props) {
-  const procedure = CHECKLISTS[area][action]
-  const total = useMemo(() => itemCount(area, action), [area, action])
+export default function ChecklistFlow({ area, action, procedure, initials, extraFlags, onDone, onCancel }: Props) {
+  const total = useMemo(() => procedure.reduce((n, g) => n + g.items.length, 0), [procedure])
 
   const [checked, setChecked] = useState<Record<string, boolean>>({})
   const [comment, setComment] = useState('')

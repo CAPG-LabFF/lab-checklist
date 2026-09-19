@@ -1,30 +1,37 @@
 import { useState } from 'react'
-import type { Area, ActionType } from '../api/backend'
+import type { Area, ActionType, ConfigProcedure } from '../api/backend'
 import { AREAS, AREA_NAME } from '../config/checklists'
 import { lisbonDay } from '../lib/time'
 import { useInitials } from '../hooks/useInitials'
 import { useAreaStates } from '../hooks/useAreaStates'
+import { useConfig } from '../hooks/useConfig'
 import InitialsBar from './InitialsBar'
 import AreaCard from './AreaCard'
 import ChecklistFlow from './ChecklistFlow'
 
-type Flow = { area: Area; action: ActionType; extraFlags?: Record<string, unknown> }
+type Flow = { area: Area; action: ActionType; procedure: ConfigProcedure; extraFlags?: Record<string, unknown> }
 
 export default function Home() {
   const { initials, setInitials, clear, valid } = useInitials()
   const { states, refreshing, error, everLoaded, refresh } = useAreaStates()
+  const { config, error: configError, refresh: refreshConfig } = useConfig()
 
   const [expanded, setExpanded] = useState<Area | null>(null)
   const [flow, setFlow] = useState<Flow | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
+  const configReady = !!config
+
   function startFlow(area: Area, action: ActionType) {
+    // Never open an empty checklist — block if the config isn't available.
+    const procedure = config?.checklists?.[area]?.[action]
+    if (!procedure || procedure.length === 0) return
     const s = states?.find((x) => x.area === area)
     const extraFlags =
       action === 'opening' && s?.staleOpen && s.lastRecord
         ? { stale_open_from: lisbonDay(s.lastRecord.timestamp) }
         : undefined
-    setFlow({ area, action, extraFlags })
+    setFlow({ area, action, procedure, extraFlags })
     window.scrollTo(0, 0)
   }
 
@@ -42,6 +49,7 @@ export default function Home() {
         <ChecklistFlow
           area={flow.area}
           action={flow.action}
+          procedure={flow.procedure}
           initials={initials}
           extraFlags={flow.extraFlags}
           onDone={() => onDone(flow.action, flow.area)}
@@ -63,6 +71,15 @@ export default function Home() {
         <div className="flex h-5 items-center justify-end text-xs text-slate-400">
           {refreshing ? 'Refreshing…' : showStaleWarning ? '' : null}
         </div>
+
+        {/* Config unavailable → cannot record safely; block rather than show empty lists. */}
+        {!configReady && (
+          <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            Checklist configuration unavailable — recording is disabled right now.{' '}
+            <button onClick={refreshConfig} className="underline">Retry</button>
+            {configError ? <span className="block text-xs opacity-80">{configError}</span> : null}
+          </div>
+        )}
 
         {showStaleWarning && (
           <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -91,6 +108,7 @@ export default function Home() {
                 state={s}
                 expanded={expanded === key}
                 hasInitials={valid}
+                configReady={configReady}
                 onToggle={() => setExpanded((e) => (e === key ? null : key))}
                 onAction={(action) => startFlow(key, action)}
               />

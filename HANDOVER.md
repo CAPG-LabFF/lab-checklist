@@ -48,30 +48,32 @@ CSV export per area).
 
 ## 3. Change a checklist item (the most common task)
 
-All checklist content is in **one file**: [`src/config/checklists.ts`](src/config/checklists.ts).
+**Checklists are edited in the Sheet now — not in code.** Open the **`Checklists`** tab (editable only
+by the lab account; everyone else sees it read-only).
 
-- **Reword an item:** change its `label` text only. Leave its `id` alone.
-- **Remove an item:** delete its line.
-- **Add an item:** add a line with a brand-new `id` (never reuse an old one). Ids are dot-namespaced,
-  e.g. `big.close.uv` — just keep them unique.
+- **Reword an item:** edit its `label` cell. Leave the `id` alone.
+- **Reorder items:** drag the rows — **row order is display order**.
+- **Add an item:** add a row, pick `area` and `procedure` from the dropdowns, fill `group` + `label`,
+  and **leave `id` blank** — the script fills a new unique id automatically at the next publish.
+- **Remove an item:** delete the row. (Recoverable — every published version is archived by date in
+  the `ChecklistsPublished` tab.)
 
-Then publish:
+**Changes go live at the next daily publish (00:00 Europe/Lisbon), not instantly.** A time-based
+trigger validates the tab and writes a snapshot to `ChecklistsPublished`; the app reads only that
+snapshot. To publish immediately, open the Apps Script editor and run **`publishChecklists()`** once.
 
-```bash
-git add -A && git commit -m "Update checklist" && git push
-```
+**A typo can't break the live checklist.** If a row is invalid (bad `area`/`procedure`, empty `label`,
+or an `area`+`procedure` left with zero items), the publish is **rejected**, a `FAILED` row is logged
+in `ChecklistsPublished`, and **yesterday's checklist stays live**. Fix the row and it publishes on the
+next run (or run `publishChecklists()` again).
 
-Pushing to `main` rebuilds and republishes the site automatically (~2 min; the page may look
-unchanged for up to ~10 min due to caching, then updates itself).
+> **Never edit or reuse an `id`.** Records store a snapshot of the checklist *as submitted*, keyed on
+> ids, so editing a `label` never rewrites past records — but reusing an old id for a different item
+> would corrupt how old records display.
 
-> **Why ids matter:** records store a snapshot of the checklist *as submitted*, keyed on ids. Changing
-> a `label` never rewrites past records. Reusing an old `id` for a different item **would** corrupt how
-> old records display — so always invent a new id.
-
-**Server-side note:** the backend (`apps-script/Code.gs`) validates that submitted items are checked
-and that ids are strings, but it accepts the client's snapshot rather than mirroring the full item
-list. So for a normal item change you edit **only** `checklists.ts` — you do **not** need to touch the
-Apps Script.
+- `src/config/checklists.ts` is now only the **seed** (it created the initial tab) and a code record —
+  editing it does nothing at runtime.
+- To re-generate the seed rows from it: `npm run seed:checklists` → `checklists-seed.tsv`.
 
 ---
 

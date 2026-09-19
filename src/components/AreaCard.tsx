@@ -7,12 +7,14 @@ type Props = {
   state: AreaState
   expanded: boolean
   hasInitials: boolean
+  configReady: boolean
   onToggle: () => void
   onAction: (action: ActionType) => void
 }
 
-export default function AreaCard({ state, expanded, hasInitials, onToggle, onAction }: Props) {
+export default function AreaCard({ state, expanded, hasInitials, configReady, onToggle, onAction }: Props) {
   const v = deriveView(state)
+  const gate = !configReady ? 'Checklist unavailable — try again shortly' : null
 
   return (
     <div className={`overflow-hidden rounded-xl border-l-4 bg-white shadow-sm ${v.border}`}>
@@ -44,15 +46,15 @@ export default function AreaCard({ state, expanded, hasInitials, onToggle, onAct
             <ActionButton
               label="Opening"
               tone="green"
-              enabled={v.openingEnabled && hasInitials}
-              reason={v.openingReason}
+              enabled={v.openingEnabled && hasInitials && configReady}
+              reason={gate ?? v.openingReason}
               onClick={() => onAction('opening')}
             />
             <ActionButton
               label="Closing"
               tone="red"
-              enabled={v.closingEnabled && hasInitials}
-              reason={v.closingReason}
+              enabled={v.closingEnabled && hasInitials && configReady}
+              reason={gate ?? v.closingReason}
               onClick={() => onAction('closing')}
             />
           </div>

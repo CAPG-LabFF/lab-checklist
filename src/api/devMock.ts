@@ -5,6 +5,7 @@
 
 import type { AreaState, LabRecord, SubmitInput, Area, PresenceEntry } from './backend'
 import { lisbonDay } from '../lib/time'
+import { CHECKLISTS } from '../config/checklists'
 
 function iso(offsetMs: number): string {
   return new Date(Date.now() - offsetMs).toISOString()
@@ -85,6 +86,11 @@ export function submit(record: SubmitInput): Promise<LabRecord> {
   }
   store.push(stored)
   return delay(stored)
+}
+
+// Published checklist config: the seed stands in for the Sheet snapshot in dev.
+export function getConfig() {
+  return delay({ publishedAt: new Date().toISOString().slice(0, 10), checklists: CHECKLISTS })
 }
 
 // ---- Presence mock (mirrors Code.gs computePresent, incl. the reset hour) ---

@@ -40,6 +40,18 @@ var PRESENCE_PAGE = 30
 // Change this single value to move the reset time.
 var PRESENCE_RESET_HOUR = 4
 
+// ---- Sheet-driven checklists ----------------------------------------------
+// The lab edits the `Checklists` tab. A daily trigger validates it and writes an
+// atomic snapshot to `ChecklistsPublished`. The app ONLY reads the published
+// snapshot — never the editable tab — so half-typed edits never go live.
+var CHECKLISTS_NAME = 'Checklists'
+// Row ORDER is display order (people reorder by dragging rows). No order column.
+var CHECKLISTS_COLUMNS = ['id', 'area', 'procedure', 'group', 'label']
+var PUBLISHED_NAME = 'ChecklistsPublished'
+var PUBLISHED_COLUMNS = ['published_at', 'status', 'detail', 'checklists_json']
+// Hour (Europe/Lisbon) the daily publish trigger runs. One place to change it.
+var CONFIG_PUBLISH_HOUR = 0
+
 // Column order in the Records sheet. Do not reorder without updating rowToRecord/appendRow.
 var COLUMNS = [
   'id',
@@ -66,6 +78,7 @@ function doGet(e) {
     if (route === 'records') return json(getRecords(e.parameter.area, e.parameter.cursor))
     if (route === 'presence') return json(getPresence())
     if (route === 'presence_history') return json(getPresenceHistory(e.parameter.cursor))
+    if (route === 'config') return json(getPublishedConfig())
     return json({ error: 'Unknown route: ' + route }, 400)
   } catch (err) {
     return json({ error: String(err && err.message ? err.message : err) }, 500)
@@ -402,4 +415,171 @@ function getPresenceHistory(cursor) {
   var page = events.slice(offset, offset + PRESENCE_PAGE)
   var next = offset + PRESENCE_PAGE < events.length ? String(offset + PRESENCE_PAGE) : null
   return { events: page, nextCursor: next }
+}
+
+// ===========================================================================
+// SHEET-DRIVEN CHECKLISTS
+// The lab edits `Checklists`; a daily trigger validates it and appends an atomic
+// snapshot to `ChecklistsPublished`. The app reads only the snapshot (route=config).
+// A typo can never empty a live checklist: on validation failure we keep the
+// previous snapshot and log the failure.
+// ===========================================================================
+
+/** Run ONCE to create the two tabs (idempotent) with headers + dropdowns. */
+function setupChecklists() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+
+  var ed = ss.getSheetByName(CHECKLISTS_NAME) || ss.insertSheet(CHECKLISTS_NAME)
+  if (ed.getLastRow() === 0) {
+    ed.appendRow(CHECKLISTS_COLUMNS)
+    ed.setFrozenRows(1)
+  }
+  // Dropdowns so `area` and `procedure` cannot be mistyped (rows 2..1000).
+  var areaRule = SpreadsheetApp.newDataValidation().requireValueInList(AREAS, true).setAllowInvalid(false).build()
+  var procRule = SpreadsheetApp.newDataValidation().requireValueInList(ACTIONS, true).setAllowInvalid(false).build()
+  ed.getRange('B2:B1000').setDataValidation(areaRule)
+  ed.getRange('C2:C1000').setDataValidation(procRule)
+
+  var pub = ss.getSheetByName(PUBLISHED_NAME) || ss.insertSheet(PUBLISHED_NAME)
+  if (pub.getLastRow() === 0) {
+    pub.appendRow(PUBLISHED_COLUMNS)
+    pub.setFrozenRows(1)
+    pub.getRange('A:A').setNumberFormat('@') // keep timestamps as literal text
+  }
+}
+
+function checklistsSheet_() {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CHECKLISTS_NAME)
+  if (!sh) throw new Error('Tab "' + CHECKLISTS_NAME + '" not found. Run setupChecklists() once.')
+  return sh
+}
+
+function publishedSheet_() {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PUBLISHED_NAME)
+  if (!sh) throw new Error('Tab "' + PUBLISHED_NAME + '" not found. Run setupChecklists() once.')
+  return sh
+}
+
+/** Fill any blank `id` cells with a fresh unique id (never reused/renumbered). */
+function assignMissingIds_() {
+  var sh = checklistsSheet_()
+  var last = sh.getLastRow()
+  if (last < 2) return
+  var idRange = sh.getRange(2, 1, last - 1, 1)
+  var ids = idRange.getValues()
+  var changed = false
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]).trim() === '') {
+      ids[i][0] = 'itm_' + Utilities.getUuid().replace(/-/g, '').slice(0, 12)
+      changed = true
+    }
+  }
+  if (changed) idRange.setValues(ids)
+}
+
+function readChecklistRows_() {
+  var sh = checklistsSheet_()
+  var last = sh.getLastRow()
+  if (last < 2) return []
+  return sh.getRange(2, 1, last - 1, CHECKLISTS_COLUMNS.length).getValues().map(function (r) {
+    return {
+      id: String(r[0]).trim(),
+      area: String(r[1]).trim(),
+      procedure: String(r[2]).trim(),
+      group: String(r[3]).trim(),
+      label: String(r[4]).trim(),
+    }
+  })
+}
+
+/** Returns { ok:true } or { ok:false, error }. A typo must not empty a checklist. */
+function validateChecklistRows_(rows) {
+  var seen = {} // "area|procedure" -> count
+  for (var a = 0; a < AREAS.length; a++)
+    for (var p = 0; p < ACTIONS.length; p++) seen[AREAS[a] + '|' + ACTIONS[p]] = 0
+
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i]
+    var n = i + 2 // sheet row number
+    if (AREAS.indexOf(row.area) === -1) return { ok: false, error: 'Row ' + n + ': invalid area "' + row.area + '".' }
+    if (ACTIONS.indexOf(row.procedure) === -1) return { ok: false, error: 'Row ' + n + ': invalid procedure "' + row.procedure + '".' }
+    if (!row.label) return { ok: false, error: 'Row ' + n + ': label is empty.' }
+    seen[row.area + '|' + row.procedure]++
+  }
+  for (var key in seen) {
+    if (seen.hasOwnProperty(key) && seen[key] === 0)
+      return { ok: false, error: 'No items for ' + key.replace('|', ' / ') + '. Every area + procedure needs at least one item.' }
+  }
+  return { ok: true }
+}
+
+/** Build the published snapshot: { area: { procedure: [ { title, items:[{id,label}] } ] } }.
+ *  Row order = display order; consecutive rows with the same group are merged. */
+function buildChecklistsSnapshot_(rows) {
+  var out = {}
+  for (var a = 0; a < AREAS.length; a++) {
+    out[AREAS[a]] = {}
+    for (var p = 0; p < ACTIONS.length; p++) out[AREAS[a]][ACTIONS[p]] = []
+  }
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i]
+    var groups = out[r.area][r.procedure]
+    var last = groups.length ? groups[groups.length - 1] : null
+    if (!last || last.title !== r.group) {
+      last = { title: r.group, items: [] }
+      groups.push(last)
+    }
+    last.items.push({ id: r.id, label: r.label })
+  }
+  return out
+}
+
+/** TIME-DRIVEN daily. Validate the editable tab and, only if valid, append a
+ *  snapshot. On failure, keep the previous snapshot and log the reason. */
+function publishChecklists() {
+  var lock = LockService.getScriptLock()
+  try { lock.waitLock(15000) } catch (e) { throw new Error('Busy; another publish is running.') }
+  try {
+    assignMissingIds_()
+    var rows = readChecklistRows_()
+    var when = Utilities.formatDate(new Date(), TIMEZONE, "yyyy-MM-dd'T'HH:mm:ssXXX")
+
+    var v = rows.length === 0 ? { ok: false, error: 'Checklists tab is empty.' } : validateChecklistRows_(rows)
+    if (!v.ok) {
+      publishedSheet_().appendRow([when, 'FAILED', v.error, ''])
+      return { ok: false, error: v.error }
+    }
+    var snapshot = buildChecklistsSnapshot_(rows)
+    publishedSheet_().appendRow([when, 'ok', '', JSON.stringify(snapshot)])
+    return { ok: true, publishedAt: when }
+  } finally {
+    lock.releaseLock()
+  }
+}
+
+/** doGet route=config → newest OK snapshot. { publishedAt, checklists } or { error }. */
+function getPublishedConfig() {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PUBLISHED_NAME)
+  if (!sh) return { error: 'No published checklist configuration.' }
+  var last = sh.getLastRow()
+  if (last < 2) return { error: 'No published checklist configuration.' }
+  var values = sh.getRange(2, 1, last - 1, PUBLISHED_COLUMNS.length).getValues()
+  for (var i = values.length - 1; i >= 0; i--) {
+    if (String(values[i][1]) === 'ok') {
+      try {
+        return { publishedAt: String(values[i][0]), checklists: JSON.parse(values[i][3]) }
+      } catch (e) {
+        // keep scanning older snapshots if one is somehow corrupt
+      }
+    }
+  }
+  return { error: 'No published checklist configuration.' }
+}
+
+/** Run ONCE to schedule the daily publish at CONFIG_PUBLISH_HOUR (de-dupes). */
+function installChecklistsTrigger() {
+  var triggers = ScriptApp.getProjectTriggers()
+  for (var i = 0; i < triggers.length; i++)
+    if (triggers[i].getHandlerFunction() === 'publishChecklists') ScriptApp.deleteTrigger(triggers[i])
+  ScriptApp.newTrigger('publishChecklists').timeBased().everyDays(1).atHour(CONFIG_PUBLISH_HOUR).create()
 }

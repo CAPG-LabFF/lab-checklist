@@ -50,6 +50,16 @@ export type AreaState = {
   staleOpen: boolean
 }
 
+// Sheet-driven checklist config (the published snapshot the app fetches).
+// Structurally identical to the Procedure types in config/checklists.ts.
+export type ConfigItem = { id: string; label: string }
+export type ConfigGroup = { title: string; items: ConfigItem[] }
+export type ConfigProcedure = ConfigGroup[]
+export type PublishedConfig = {
+  publishedAt: string
+  checklists: Record<Area, Record<ActionType, ConfigProcedure>>
+}
+
 export type SubmitInput = Omit<LabRecord, 'id' | 'timestamp' | 'flags'> & {
   flags?: Record<string, unknown>
 }
@@ -122,6 +132,12 @@ export async function submit(record: SubmitInput): Promise<LabRecord> {
 
 // Email subscriptions were removed. The Subscribers sheet and the Records
 // `notified` column are intentionally left in place (append-only), just unused.
+
+/** The current published checklist snapshot. Throws if none is available. */
+export async function getConfig(): Promise<PublishedConfig> {
+  if (useMock) return (await mock()).getConfig()
+  return get({ route: 'config' })
+}
 
 // ---- Presence ("In Lab" board) --------------------------------------------
 // Independent of the checklists. The server records times for traceability but
