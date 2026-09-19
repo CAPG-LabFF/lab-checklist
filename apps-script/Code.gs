@@ -755,11 +755,11 @@ function setupNmr() {
   // NMRSchedule (grid). Seed a Mon–Fri skeleton with a couple of slots to edit.
   if (!ss.getSheetByName(NMR_SCHEDULE_NAME)) {
     var sch = ss.insertSheet(NMR_SCHEDULE_NAME)
-    sch.getRange('A:F').setNumberFormat('@') // plain text — no "08:30" → 1899 Date coercion
+    sch.getRange('A:F').setNumberFormat('@') // plain text — "08:30" stays "08:30", no 1899 Date
     sch.getRange(1, 1, 3, 6).setValues([
       ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-      ['Manhã', '', '', '', '', ''],
-      ['Tarde', '', '', '', '', ''],
+      ['08:30', '', '', '', '', ''],
+      ['11:30', '', '', '', '', ''],
     ])
     sch.setFrozenRows(1)
     sch.setFrozenColumns(1)
