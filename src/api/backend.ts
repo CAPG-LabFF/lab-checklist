@@ -182,3 +182,93 @@ export async function getPresenceHistory(
   if (useMock) return (await mock()).getPresenceHistory(cursor)
   return get({ route: 'presence_history', ...(cursor ? { cursor } : {}) })
 }
+
+// ---- NMR ------------------------------------------------------------------
+
+export type NmrLab = 'CA' | 'PG'
+export type NmrType = '1h' | 'long'
+export type NmrCompStatus = 'note' | 'done' | 'reopened' | 'cancelled'
+
+export type NmrSchedule = {
+  days: string[]
+  slots: { time: string; byDay: Record<string, string> }[]
+}
+export type NmrOptions = { publishedAt: string; solvents: string[]; experiments: string[] }
+
+export type NmrSubmission = {
+  id: string
+  timestamp: string
+  type: NmrType
+  initials: string
+  lab: NmrLab
+  sample_name: string
+  solvent: string
+  experiments: string[]
+  quantity: string
+  mw: string
+  notes: string
+}
+export type NmrCompletionEvent = {
+  id: string
+  timestamp: string
+  submission_id: string
+  operator: string
+  notes: string
+  status: NmrCompStatus
+}
+export type NmrQueueItem = { submission: NmrSubmission; events: NmrCompletionEvent[] }
+
+export type NmrSubmitInput = {
+  type: NmrType
+  initials: string
+  lab: NmrLab
+  sample_name: string
+  solvent: string
+  experiments?: string[]
+  quantity?: string
+  mw?: string
+  notes?: string
+}
+
+/** Live schedule grid (read directly — reflects same-day edits). */
+export async function getNmrSchedule(): Promise<NmrSchedule> {
+  if (useMock) return (await mock()).getNmrSchedule()
+  return get({ route: 'nmr_schedule' })
+}
+
+/** Published solvent + experiment lists. */
+export async function getNmrOptions(): Promise<NmrOptions> {
+  if (useMock) return (await mock()).getNmrOptions()
+  return get({ route: 'nmr_options' })
+}
+
+/** Append a submission. Server validates against the published options. */
+export async function submitNmr(record: NmrSubmitInput): Promise<NmrSubmission> {
+  if (useMock) return (await mock()).submitNmr(record)
+  return post({ route: 'nmr_submit', record })
+}
+
+/** Pending queue, oldest first. */
+export async function getNmrQueue(): Promise<{ queue: NmrQueueItem[] }> {
+  if (useMock) return (await mock()).getNmrQueue()
+  return get({ route: 'nmr_queue' })
+}
+
+/** Completed samples, newest first, paginated. */
+export async function getNmrRecords(
+  cursor?: string,
+): Promise<{ records: NmrQueueItem[]; nextCursor: string | null }> {
+  if (useMock) return (await mock()).getNmrRecords(cursor)
+  return get({ route: 'nmr_records', ...(cursor ? { cursor } : {}) })
+}
+
+/** Append a completion event (note / done / reopened / cancelled). */
+export async function completeNmr(event: {
+  submission_id: string
+  operator: string
+  notes?: string
+  status: NmrCompStatus
+}): Promise<{ ok: true; event: NmrCompletionEvent }> {
+  if (useMock) return (await mock()).completeNmr(event)
+  return post({ route: 'nmr_complete', event })
+}
